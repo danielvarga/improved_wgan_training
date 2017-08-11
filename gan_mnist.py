@@ -218,8 +218,6 @@ with tf.Session() as session:
 
     tf.summary.scalar("disc_cost", disc_cost)
 
-    merged_summary_op = tf.summary.merge_all()
-
     ALPHA_COUNT = 100
 
     alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
@@ -232,8 +230,13 @@ with tf.Session() as session:
     alpha_to_disc_cost_op = Discriminator(alphas1*fake_data + (1-alphas1)*real_data_ph1)
 
     grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)
+    slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_alphas), reduction_indices=[1]))
 
-    
+    tf.summary.histogram("slopes_for_alphas", slopes_for_alphas)
+    tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
+    tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
+
+    merged_summary_op = tf.summary.merge_all()
 
     gen = inf_train_gen()
 
@@ -263,6 +266,7 @@ with tf.Session() as session:
         lib.plot.plot('train disc cost', _disc_cost)
         lib.plot.plot('time', time.time() - start_time)
 
+        alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
 
         # Calculate dev loss and generate samples every 100 iters
         if iteration % 50 == 49:
@@ -279,13 +283,17 @@ with tf.Session() as session:
 
             alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
                 feed_dict={
-                            alphas: np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1)),
+                            alphas: alpha_grid,
                             real_data_ph: heldout_minibatch})
             alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
             print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
             print "==="
 
-        summary = session.run([merged_summary_op], feed_dict={real_data: heldout_minibatch})
+        summary = session.run([merged_summary_op],
+            feed_dict={ real_data: heldout_minibatch,
+                        real_data_ph: heldout_minibatch,
+                        alphas: alpha_grid
+                        })
         summary_writer.add_summary(summary[0], iteration)
 
         # Write logs every 100 iters
