@@ -219,11 +219,11 @@ with tf.Session() as session:
     ALPHA_COUNT = 10
 
     alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
-    alphas1 = tf.expand_dims(alphas, axis=1)
+    alphas1 = tf.expand_dims(alphas, axis=-1)
     real_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, 784))
-    real_data_ph1 = tf.expand_dims(real_data_ph, axis=-1)
+    real_data_ph1 = tf.expand_dims(real_data_ph, axis=1)
     fake_data = Generator(BATCH_SIZE)
-    fake_data = tf.expand_dims(fake_data, axis=-1)
+    fake_data = tf.expand_dims(fake_data, axis=1)
 
     alpha_to_disc_cost_op = Discriminator(alphas1*fake_data + (1-alphas1)*real_data_ph1)
     gen = inf_train_gen()
@@ -254,7 +254,8 @@ with tf.Session() as session:
             feed_dict={
                             alphas: np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1)),
                             real_data_ph: _data})
-        print alpha_to_disc_cost[0].shape, alpha_to_disc_cost[0]
+        alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
+        print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
         print "==="
 
         # Calculate dev loss and generate samples every 100 iters
