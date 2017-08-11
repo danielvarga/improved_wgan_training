@@ -19,7 +19,7 @@ import tflib.save_images
 import tflib.mnist
 import tflib.plot
 
-MODE = 'dcgan' # dcgan, wgan, or wgan-gp
+MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
@@ -135,10 +135,11 @@ elif MODE == 'wgan-gp':
     gen_cost = -tf.reduce_mean(disc_fake)
     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
+    lower_alpha, upper_alpha = 0.0, 0.0
     alpha = tf.random_uniform(
         shape=[BATCH_SIZE,1], 
-        minval=0.,
-        maxval=1.
+        minval=lower_alpha,
+        maxval=upper_alpha
     )
     differences = fake_data - real_data
     interpolates = real_data + (alpha*differences)
@@ -214,9 +215,12 @@ with tf.Session() as session:
     for param_name, param in lib._params.iteritems():
         print param_name, param
         tf.summary.histogram(param_name+"/weights", param)
+
+    tf.summary.scalar("disc_cost", disc_cost)
+
     merged_summary_op = tf.summary.merge_all()
 
-    ALPHA_COUNT = 10
+    ALPHA_COUNT = 100
 
     alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
     alphas1 = tf.expand_dims(alphas, axis=-1)
@@ -226,7 +230,15 @@ with tf.Session() as session:
     fake_data = tf.expand_dims(fake_data, axis=1)
 
     alpha_to_disc_cost_op = Discriminator(alphas1*fake_data + (1-alphas1)*real_data_ph1)
+
+    grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)
+
+    
+
     gen = inf_train_gen()
+
+    for heldout_minibatch, _ in dev_gen():
+        break
 
     for iteration in xrange(ITERS):
         start_time = time.time()
@@ -244,22 +256,16 @@ with tf.Session() as session:
                 [disc_cost, disc_train_op],
                 feed_dict={real_data: _data}
             )
+            
             if clip_disc_weights is not None:
                 _ = session.run(clip_disc_weights)
 
         lib.plot.plot('train disc cost', _disc_cost)
         lib.plot.plot('time', time.time() - start_time)
 
-        alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
-            feed_dict={
-                            alphas: np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1)),
-                            real_data_ph: _data})
-        alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
-        print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
-        print "==="
 
         # Calculate dev loss and generate samples every 100 iters
-        if iteration % 100 == 99:
+        if iteration % 50 == 49:
             dev_disc_costs = []
             for images,_ in dev_gen():
                 _dev_disc_cost = session.run(
@@ -271,9 +277,16 @@ with tf.Session() as session:
 
             generate_image(iteration, _data)
 
-        summary = session.run([merged_summary_op])
-        summary_writer.add_summary(summary[0], iteration)
+            alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
+                feed_dict={
+                            alphas: np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1)),
+                            real_data_ph: heldout_minibatch})
+            alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
+            print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
+            print "==="
 
+        summary = session.run([merged_summary_op], feed_dict={real_data: heldout_minibatch})
+        summary_writer.add_summary(summary[0], iteration)
 
         # Write logs every 100 iters
         if (iteration < 5) or (iteration % 100 == 99):
