@@ -135,7 +135,7 @@ elif MODE == 'wgan-gp':
     gen_cost = -tf.reduce_mean(disc_fake)
     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
-    lower_alpha, upper_alpha = 0.5, 0.5
+    lower_alpha, upper_alpha = 0.0, 1.0
     alpha = tf.random_uniform(
         shape=[BATCH_SIZE,1], 
         minval=lower_alpha,
@@ -210,7 +210,9 @@ with tf.Session() as session:
 
     session.run(tf.initialize_all_variables())
 
-    summary_writer = tf.summary.FileWriter("logs", graph=tf.get_default_graph())
+    session_name = "%s-%f-%f-lambda%f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
+
+    summary_writer = tf.summary.FileWriter("logs/%s" % session_name, graph=tf.get_default_graph())
 
     for param_name, param in lib._params.iteritems():
         print param_name, param
@@ -231,15 +233,18 @@ with tf.Session() as session:
 
     alpha_to_disc_cost_op = Discriminator(x)
 
-    grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)
-    unidirecional_slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_alphas), reduction_indices=[1]))
+    grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)[0]
 
     grad_by_x = tf.gradients(Discriminator(x), [x])[0]
     slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[1]))
- 
-    tf.summary.histogram("slopes_for_alphas", slopes_for_alphas)
+
+    tf.summary.histogram("slopes_for_all_alphas", slopes_for_alphas)
     tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
     tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
+
+    tf.summary.histogram("unidirectional_grad_at_all_alphas", grad_by_alphas)
+    tf.summary.histogram("unidirectional_grad_at_alpha0", grad_by_alphas[:, 0])
+    tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
 
     merged_summary_op = tf.summary.merge_all()
 
