@@ -135,7 +135,7 @@ elif MODE == 'wgan-gp':
     gen_cost = -tf.reduce_mean(disc_fake)
     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
-    lower_alpha, upper_alpha = 0.0, 0.0
+    lower_alpha, upper_alpha = 0.5, 0.5
     alpha = tf.random_uniform(
         shape=[BATCH_SIZE,1], 
         minval=lower_alpha,
@@ -195,7 +195,7 @@ def generate_image(frame, true_dist):
     samples = session.run(fixed_noise_samples)
     lib.save_images.save_images(
         samples.reshape((128, 28, 28)), 
-        'samples_{}.png'.format(frame)
+        'pictures/gp05_samples_{}.png'.format(frame)
     )
 
 # Dataset iterator
@@ -227,11 +227,16 @@ with tf.Session() as session:
     fake_data = Generator(BATCH_SIZE)
     fake_data = tf.expand_dims(fake_data, axis=1)
 
-    alpha_to_disc_cost_op = Discriminator(alphas1*fake_data + (1-alphas1)*real_data_ph1)
+    x = alphas1*fake_data + (1-alphas1)*real_data_ph1
+
+    alpha_to_disc_cost_op = Discriminator(x)
 
     grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)
-    slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_alphas), reduction_indices=[1]))
+    unidirecional_slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_alphas), reduction_indices=[1]))
 
+    grad_by_x = tf.gradients(Discriminator(x), [x])[0]
+    slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[1]))
+ 
     tf.summary.histogram("slopes_for_alphas", slopes_for_alphas)
     tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
     tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
@@ -269,7 +274,7 @@ with tf.Session() as session:
         alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
 
         # Calculate dev loss and generate samples every 100 iters
-        if iteration % 50 == 49:
+        if iteration % 500 == 499:
             dev_disc_costs = []
             for images,_ in dev_gen():
                 _dev_disc_cost = session.run(
@@ -287,14 +292,17 @@ with tf.Session() as session:
                             real_data_ph: heldout_minibatch})
             alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
             print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
+            if iteration % 2000 == 1999:
+                np.save('alpha_to_disc_cost_gp05_%d.npy' % iteration, alpha_to_disc_cost)
+                print '----- Alpha_to_disc_cost numpy array saved -----'
             print "==="
 
-        summary = session.run([merged_summary_op],
-            feed_dict={ real_data: heldout_minibatch,
-                        real_data_ph: heldout_minibatch,
-                        alphas: alpha_grid
-                        })
-        summary_writer.add_summary(summary[0], iteration)
+            summary = session.run([merged_summary_op],
+                feed_dict={ real_data: heldout_minibatch,
+                            real_data_ph: heldout_minibatch,
+                            alphas: alpha_grid
+                            })
+            summary_writer.add_summary(summary[0], iteration)
 
         # Write logs every 100 iters
         if (iteration < 5) or (iteration % 100 == 99):
