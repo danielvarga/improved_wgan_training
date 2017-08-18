@@ -193,6 +193,8 @@ fixed_noise = tf.constant(np.random.normal(size=(128, 128)).astype('float32'))
 fixed_noise_samples = Generator(128, noise=fixed_noise)
 def generate_image(frame, true_dist):
     samples = session.run(fixed_noise_samples)
+    if not os.path.exists('pictures'):
+        os.mkdir('pictures')
     lib.save_images.save_images(
         samples.reshape((128, 28, 28)), 
         'pictures/gp05_samples_{}.png'.format(frame)
