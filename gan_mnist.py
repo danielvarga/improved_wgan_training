@@ -200,8 +200,9 @@ def generate_image(frame, true_dist):
         os.mkdir('pictures')
     lib.save_images.save_images(
         samples.reshape((128, 28, 28)), 
-        'pictures/gp05_samples_{}.png'.format(frame)
+        'pictures/samples_{}.png'.format(frame)
     )
+    
 
 # Dataset iterator
 train_gen, dev_gen, test_gen = lib.mnist.load(BATCH_SIZE, BATCH_SIZE)
@@ -254,6 +255,9 @@ with tf.Session() as session:
     tf.summary.histogram("unidirectional_grad_at_alpha0", grad_by_alphas[:, 0])
     tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
 
+    tf.summary.image("generated", tf.reshape(fixed_noise_samples, (128, 28, 28, 1)), max_outputs=50)
+    
+
     merged_summary_op = tf.summary.merge_all()
 
     gen = inf_train_gen()
@@ -287,7 +291,7 @@ with tf.Session() as session:
         alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
 
         # Calculate dev loss and generate samples every 100 iters
-        if iteration % 500 == 499:
+        if iteration % 100 == 99:
             dev_disc_costs = []
             for images,_ in dev_gen():
                 _dev_disc_cost = session.run(
@@ -299,6 +303,7 @@ with tf.Session() as session:
 
             generate_image(iteration, _data)
 
+            
             alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
                 feed_dict={
                             alphas: alpha_grid,
@@ -306,7 +311,7 @@ with tf.Session() as session:
             alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
             print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
             if iteration % 2000 == 1999:
-                np.save('alpha_to_disc_cost_gp05_%d.npy' % iteration, alpha_to_disc_cost)
+                np.save('alpha_to_disc_cost_%d.npy' % iteration, alpha_to_disc_cost)
                 print '----- Alpha_to_disc_cost numpy array saved -----'
             print "==="
 
