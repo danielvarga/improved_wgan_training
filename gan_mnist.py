@@ -249,9 +249,11 @@ with tf.Session() as session:
         tf.summary.histogram(param_name+"/weights", param)
 
     for grad, var in gen_gvs:
-        tf.summary.histogram(var.name + "/gradients", grad)
+        if grad is not None:
+            tf.summary.histogram(var.name + "/gradients", grad)
     for grad, var in disc_gvs:
-        tf.summary.histogram(var.name + "/gradients", grad)
+        if grad is not None:
+            tf.summary.histogram(var.name + "/gradients", grad)
 
     """
     config = projector.ProjectorConfig()
