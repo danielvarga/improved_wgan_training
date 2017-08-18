@@ -19,13 +19,16 @@ import tflib.save_images
 import tflib.mnist
 import tflib.plot
 
-MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
+MODE = 'wgan' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
 LAMBDA = 10 # Gradient penalty lambda hyperparameter
 ITERS = 200000 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
+DO_BATCHNORM = True
+if DO_BATCHNORM:
+    assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
 
 lib.print_model_settings(locals().copy())
 
@@ -57,20 +60,20 @@ def Generator(n_samples, noise=None):
         noise = tf.random_normal([n_samples, 128])
 
     output = lib.ops.linear.Linear('Generator.Input', 128, 4*4*4*DIM, noise)
-    if MODE == 'wgan':
+    if DO_BATCHNORM:
         output = lib.ops.batchnorm.Batchnorm('Generator.BN1', [0], output)
     output = tf.nn.relu(output)
     output = tf.reshape(output, [-1, 4*DIM, 4, 4])
 
     output = lib.ops.deconv2d.Deconv2D('Generator.2', 4*DIM, 2*DIM, 5, output)
-    if MODE == 'wgan':
+    if DO_BATCHNORM:
         output = lib.ops.batchnorm.Batchnorm('Generator.BN2', [0,2,3], output)
     output = tf.nn.relu(output)
 
     output = output[:,:,:7,:7]
 
     output = lib.ops.deconv2d.Deconv2D('Generator.3', 2*DIM, DIM, 5, output)
-    if MODE == 'wgan':
+    if DO_BATCHNORM:
         output = lib.ops.batchnorm.Batchnorm('Generator.BN3', [0,2,3], output)
     output = tf.nn.relu(output)
 
@@ -86,12 +89,12 @@ def Discriminator(inputs):
     output = LeakyReLU(output)
 
     output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=2)
-    if MODE == 'wgan':
+    if DO_BATCHNORM:
         output = lib.ops.batchnorm.Batchnorm('Discriminator.BN2', [0,2,3], output)
     output = LeakyReLU(output)
 
     output = lib.ops.conv2d.Conv2D('Discriminator.3', 2*DIM, 4*DIM, 5, output, stride=2)
-    if MODE == 'wgan':
+    if DO_BATCHNORM:
         output = lib.ops.batchnorm.Batchnorm('Discriminator.BN3', [0,2,3], output)
     output = LeakyReLU(output)
 
@@ -135,7 +138,7 @@ elif MODE == 'wgan-gp':
     gen_cost = -tf.reduce_mean(disc_fake)
     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
-    lower_alpha, upper_alpha = 0.5, 0.5
+    lower_alpha, upper_alpha = 0.0, 1.0
     alpha = tf.random_uniform(
         shape=[BATCH_SIZE,1], 
         minval=lower_alpha,
@@ -212,7 +215,12 @@ with tf.Session() as session:
 
     session.run(tf.initialize_all_variables())
 
-    summary_writer = tf.summary.FileWriter("logs", graph=tf.get_default_graph())
+    if MODE=='wgan-gp':
+        session_name = "%s-%f-%f-lambda%f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
+    elif MODE=='wgan':
+        session_name = "%s-batchnorm=%s" % (MODE, DO_BATCHNORM)
+
+    summary_writer = tf.summary.FileWriter("logs/%s" % session_name, graph=tf.get_default_graph())
 
     for param_name, param in lib._params.iteritems():
         print param_name, param
@@ -233,15 +241,18 @@ with tf.Session() as session:
 
     alpha_to_disc_cost_op = Discriminator(x)
 
-    grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)
-    unidirecional_slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_alphas), reduction_indices=[1]))
+    grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)[0]
 
     grad_by_x = tf.gradients(Discriminator(x), [x])[0]
     slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[1]))
- 
-    tf.summary.histogram("slopes_for_alphas", slopes_for_alphas)
+
+    tf.summary.histogram("slopes_for_all_alphas", slopes_for_alphas)
     tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
     tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
+
+    tf.summary.histogram("unidirectional_grad_at_all_alphas", grad_by_alphas)
+    tf.summary.histogram("unidirectional_grad_at_alpha0", grad_by_alphas[:, 0])
+    tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
 
     merged_summary_op = tf.summary.merge_all()
 
