@@ -19,7 +19,9 @@ import tflib.save_images
 import tflib.mnist
 import tflib.plot
 
-MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
+from tensorflow.contrib.tensorboard.plugins import projector
+
+MODE = 'wgan' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
@@ -116,12 +118,17 @@ if MODE == 'wgan':
     gen_cost = -tf.reduce_mean(disc_fake)
     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
-    gen_train_op = tf.train.RMSPropOptimizer(
+    gen_optimizer = tf.train.RMSPropOptimizer(
         learning_rate=5e-5
-    ).minimize(gen_cost, var_list=gen_params)
-    disc_train_op = tf.train.RMSPropOptimizer(
+    )
+    gen_gvs = gen_optimizer.compute_gradients(gen_cost, var_list=gen_params)
+    gen_train_op = gen_optimizer.apply_gradients(gen_gvs)
+
+    disc_optimizer = tf.train.RMSPropOptimizer(
         learning_rate=5e-5
-    ).minimize(disc_cost, var_list=disc_params)
+    )
+    disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
+    disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
 
     clip_ops = []
     for var in lib.params_with_name('Discriminator'):
@@ -151,16 +158,21 @@ elif MODE == 'wgan-gp':
     gradient_penalty = tf.reduce_mean((slopes-1.)**2)
     disc_cost += LAMBDA*gradient_penalty
 
-    gen_train_op = tf.train.AdamOptimizer(
-        learning_rate=1e-4, 
+    gen_optimizer = tf.train.AdamOptimizer(
+        learning_rate=1e-4,
         beta1=0.5,
         beta2=0.9
-    ).minimize(gen_cost, var_list=gen_params)
-    disc_train_op = tf.train.AdamOptimizer(
-        learning_rate=1e-4, 
-        beta1=0.5, 
+    )
+    gen_gvs = gen_optimizer.compute_gradients(gen_cost, var_list=gen_params)
+    gen_train_op = gen_optimizer.apply_gradients(gen_gvs)
+
+    disc_optimizer = tf.train.AdamOptimizer(
+        learning_rate=1e-4,
+        beta1=0.5,
         beta2=0.9
-    ).minimize(disc_cost, var_list=disc_params)
+    )
+    disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
+    disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
 
     clip_disc_weights = None
 
@@ -180,14 +192,19 @@ elif MODE == 'dcgan':
     ))
     disc_cost /= 2.
 
-    gen_train_op = tf.train.AdamOptimizer(
-        learning_rate=2e-4, 
+    gen_optimizer = tf.train.AdamOptimizer(
+        learning_rate=2e-4,
         beta1=0.5
-    ).minimize(gen_cost, var_list=gen_params)
-    disc_train_op = tf.train.AdamOptimizer(
-        learning_rate=2e-4, 
+    )
+    gen_gvs = gen_optimizer.compute_gradients(gen_cost, var_list=gen_params)
+    gen_train_op = gen_optimizer.apply_gradients(gen_gvs)
+
+    disc_optimizer = tf.train.AdamOptimizer(
+        learning_rate=2e-4,
         beta1=0.5
-    ).minimize(disc_cost, var_list=disc_params)
+    )
+    disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
+    disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
 
     clip_disc_weights = None
 
@@ -220,12 +237,31 @@ with tf.Session() as session:
         session_name = "%s-%f-%f-lambda%f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
     elif MODE=='wgan':
         session_name = "%s-batchnorm=%s" % (MODE, DO_BATCHNORM)
+    elif MODE=='dcgan':
+        session_name = "%s" % (MODE)
 
-    summary_writer = tf.summary.FileWriter("logs/%s" % session_name, graph=tf.get_default_graph())
+    LOG_DIR = "logs/%s" % session_name
+
+    summary_writer = tf.summary.FileWriter(LOG_DIR, graph=tf.get_default_graph())
 
     for param_name, param in lib._params.iteritems():
         print param_name, param
         tf.summary.histogram(param_name+"/weights", param)
+
+    for grad, var in gen_gvs:
+        if grad is not None:
+            tf.summary.histogram(var.name + "/gradients", grad)
+    for grad, var in disc_gvs:
+        if grad is not None:
+            tf.summary.histogram(var.name + "/gradients", grad)
+
+    """
+    config = projector.ProjectorConfig()
+    embedding = config.embeddings.add()
+    embedding.tensor_name = fixed_noise_samples.name
+    embedding.metadata_path = os.path.join(LOG_DIR, fixed_noise_samples.name)
+    projector.visualize_embeddings(summary_writer, config)
+    """
 
     tf.summary.scalar("disc_cost", disc_cost)
 
@@ -256,7 +292,6 @@ with tf.Session() as session:
     tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
 
     tf.summary.image("generated", tf.reshape(fixed_noise_samples, (128, 28, 28, 1)), max_outputs=50)
-    
 
     merged_summary_op = tf.summary.merge_all()
 
@@ -281,7 +316,7 @@ with tf.Session() as session:
                 [disc_cost, disc_train_op],
                 feed_dict={real_data: _data}
             )
-            
+
             if clip_disc_weights is not None:
                 _ = session.run(clip_disc_weights)
 
@@ -291,7 +326,7 @@ with tf.Session() as session:
         alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
 
         # Calculate dev loss and generate samples every 100 iters
-        if iteration % 100 == 99:
+        if iteration < 50 or iteration % 100 == 0:
             dev_disc_costs = []
             for images,_ in dev_gen():
                 _dev_disc_cost = session.run(
@@ -303,17 +338,19 @@ with tf.Session() as session:
 
             generate_image(iteration, _data)
 
-            
             alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
                 feed_dict={
                             alphas: alpha_grid,
                             real_data_ph: heldout_minibatch})
             alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
             print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
-            if iteration % 2000 == 1999:
-                np.save('alpha_to_disc_cost_%d.npy' % iteration, alpha_to_disc_cost)
-                print '----- Alpha_to_disc_cost numpy array saved -----'
-            print "==="
+
+            np.save(os.path.join(LOG_DIR, 'alpha_to_disc_cost_gp05_%d.npy' % iteration), alpha_to_disc_cost)
+            print '----- Alpha_to_disc_cost numpy array saved -----'
+
+            if iteration % 500 == 0:
+                saver = tf.train.Saver()
+                saver.save(session, os.path.join(LOG_DIR, "model.ckpt"), iteration)
 
             summary = session.run([merged_summary_op],
                 feed_dict={ real_data: heldout_minibatch,

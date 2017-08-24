@@ -18,6 +18,8 @@ import tflib.small_imagenet
 import tflib.ops.layernorm
 import tflib.plot
 
+import tflib.lsun as lsun
+
 # Download 64x64 ImageNet at http://image-net.org/small/download.php and
 # fill in the path to the extracted files here!
 DATA_DIR = ''
@@ -492,6 +494,9 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
                     minval=0.,
                     maxval=1.
                 )
+                # Bernoulli
+                # alpha = tf.where(alpha < 0.5, tf.ones([BATCH_SIZE/len(DEVICES),1]), tf.zeros([BATCH_SIZE/len(DEVICES), 1]))
+
                 differences = fake_data - real_data
                 interpolates = real_data + (alpha*differences)
                 gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
@@ -576,7 +581,8 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
 
 
     # Dataset iterator
-    train_gen, dev_gen = lib.small_imagenet.load(BATCH_SIZE, data_dir=DATA_DIR)
+    #train_gen, dev_gen = lib.small_imagenet.load(BATCH_SIZE, data_dir=DATA_DIR)
+    train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/csadrian/datasets/bedroom_64_64.npy")
 
     def inf_train_gen():
         while True:
