@@ -494,6 +494,7 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
                     minval=0.,
                     maxval=1.
                 )
+
                 # Bernoulli
                 # alpha = tf.where(alpha < 0.5, tf.ones([BATCH_SIZE/len(DEVICES),1]), tf.zeros([BATCH_SIZE/len(DEVICES), 1]))
 
@@ -501,7 +502,12 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
                 interpolates = real_data + (alpha*differences)
                 gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
                 slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+
                 gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+
+                # Flat
+                # gradient_penalty = tf.reduce_mean((tf.maximum(1., tf.abs(slopes)) - 1.0)**2)
+
                 disc_cost += LAMBDA*gradient_penalty
 
             elif MODE == 'dcgan':
