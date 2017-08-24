@@ -23,8 +23,8 @@ import tflib.lsun as lsun
 # Download 64x64 ImageNet at http://image-net.org/small/download.php and
 # fill in the path to the extracted files here!
 DATA_DIR = ''
-if len(DATA_DIR) == 0:
-    raise Exception('Please specify path to data directory in gan_64x64.py!')
+#if len(DATA_DIR) == 0:
+#    raise Exception('Please specify path to data directory in gan_64x64.py!')
 
 MODE = 'wgan-gp' # dcgan, wgan, wgan-gp, lsgan
 DIM = 64 # Model dimensionality
