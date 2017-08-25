@@ -489,24 +489,34 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
                 gen_cost = -tf.reduce_mean(disc_fake)
                 disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
+                # Original WGAN-GP interpolation:
                 alpha = tf.random_uniform(
                     shape=[BATCH_SIZE/len(DEVICES),1], 
                     minval=0.,
                     maxval=1.
                 )
 
-                # Bernoulli
+                # Bernoulli (0V1):
                 # alpha = tf.where(alpha < 0.5, tf.ones([BATCH_SIZE/len(DEVICES),1]), tf.zeros([BATCH_SIZE/len(DEVICES), 1]))
+
+                # Straight GP1:
+                alpha = tf.ones([BATCH_SIZE/len(DEVICES),1])
 
                 differences = fake_data - real_data
                 interpolates = real_data + (alpha*differences)
                 gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
                 slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
 
+                # Original WGAN-GP penalty:
                 gradient_penalty = tf.reduce_mean((slopes-1.)**2)
 
                 # Flat
+                # TODO This could be tf.reduce_mean(tf.maximum(1., squared_slopes) - 1.0), try it.
                 # gradient_penalty = tf.reduce_mean((tf.maximum(1., tf.abs(slopes)) - 1.0)**2)
+
+                # L2
+                # it's simply tf.square(slopes), but I'm not sure whether TF optimizes away tf.square(tf.sqrt()).
+                # gradient_penalty = tf.reduce_sum(tf.square(gradients), reduction_indices=[1])
 
                 disc_cost += LAMBDA*gradient_penalty
 
@@ -626,6 +636,14 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
 
         lib.plot.plot('train disc cost', _disc_cost)
         lib.plot.plot('time', time.time() - start_time)
+
+        # currently abandoned. the first attempt to quantify image diversity didn't pan out.
+        def image_variance():
+            samples = session.run(all_fixed_noise_samples)
+            deviations = np.std(samples, axis=0)
+            avg_deviation = np.mean(deviations)
+            print "avg_deviation", avg_deviation
+        # image_variance()
 
         if iteration % 200 == 199:
             t = time.time()
