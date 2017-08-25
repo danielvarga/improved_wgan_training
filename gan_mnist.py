@@ -21,7 +21,7 @@ import tflib.plot
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
-MODE = 'wgan' # dcgan, wgan, or wgan-gp
+MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
@@ -31,6 +31,11 @@ OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
+
+# Set lambda to zero at this iteration; set for -1 to disable
+LAMBDA_TO_ZERO_ITER = -1 
+if len(sys.argv) == 2:
+    LAMBDA_TO_ZERO_ITER = int(sys.argv[1])
 
 lib.print_model_settings(locals().copy())
 
@@ -105,6 +110,8 @@ def Discriminator(inputs):
 
     return tf.reshape(output, [-1])
 
+lambda_tf = tf.placeholder(tf.float32, shape=[])
+
 real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
 fake_data = Generator(BATCH_SIZE)
 
@@ -156,7 +163,9 @@ elif MODE == 'wgan-gp':
     gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
     slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     gradient_penalty = tf.reduce_mean((slopes-1.)**2)
-    disc_cost += LAMBDA*gradient_penalty
+
+    #disc_cost += LAMBDA*gradient_penalty
+    disc_cost += lambda_tf*gradient_penalty
 
     gen_optimizer = tf.train.AdamOptimizer(
         learning_rate=1e-4,
@@ -217,7 +226,7 @@ def generate_image(frame, true_dist):
         os.mkdir('pictures')
     lib.save_images.save_images(
         samples.reshape((128, 28, 28)), 
-        'pictures/samples_{}.png'.format(frame)
+        'pictures/samples_lambda0at{}_{}.png'.format(LAMBDA_TO_ZERO_ITER, frame)
     )
     
 
@@ -231,7 +240,8 @@ def inf_train_gen():
 # Train loop
 with tf.Session() as session:
 
-    session.run(tf.initialize_all_variables())
+    session.run(tf.global_variables_initializer())
+    #session.run(tf.initialize_all_variables())
 
     if MODE=='wgan-gp':
         session_name = "%s-%f-%f-lambda%f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
@@ -303,6 +313,14 @@ with tf.Session() as session:
     for iteration in xrange(ITERS):
         start_time = time.time()
 
+        if iteration == LAMBDA_TO_ZERO_ITER:
+            LAMBDA = 0
+            print ('Lambda set to zero at iteration %d' % iteration)
+        #LAMBDA = 1.0 / (iteration + 1)
+
+        BLAMBDA = LAMBDA #np.array([LAMBDA]*1)
+        #print BLAMBDA.shape
+
         if iteration > 0:
             _ = session.run(gen_train_op)
 
@@ -314,7 +332,7 @@ with tf.Session() as session:
             _data = gen.next()
             _disc_cost, _ = session.run(
                 [disc_cost, disc_train_op],
-                feed_dict={real_data: _data}
+                feed_dict={real_data: _data, lambda_tf: BLAMBDA}
             )
 
             if clip_disc_weights is not None:
@@ -326,12 +344,12 @@ with tf.Session() as session:
         alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
 
         # Calculate dev loss and generate samples every 100 iters
-        if iteration < 50 or iteration % 100 == 0:
+        if iteration < 5 or iteration % 100 == 0:
             dev_disc_costs = []
             for images,_ in dev_gen():
                 _dev_disc_cost = session.run(
                     disc_cost, 
-                    feed_dict={real_data: images}
+                    feed_dict={real_data: images, lambda_tf: BLAMBDA}
                 )
                 dev_disc_costs.append(_dev_disc_cost)
             lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
@@ -341,12 +359,13 @@ with tf.Session() as session:
             alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
                 feed_dict={
                             alphas: alpha_grid,
-                            real_data_ph: heldout_minibatch})
+                            real_data_ph: heldout_minibatch,
+                            lambda_tf: BLAMBDA})
             alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
-            print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
+            #print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
 
             np.save(os.path.join(LOG_DIR, 'alpha_to_disc_cost_gp05_%d.npy' % iteration), alpha_to_disc_cost)
-            print '----- Alpha_to_disc_cost numpy array saved -----'
+            #print '----- Alpha_to_disc_cost numpy array saved -----'
 
             if iteration % 500 == 0:
                 saver = tf.train.Saver()
@@ -355,7 +374,8 @@ with tf.Session() as session:
             summary = session.run([merged_summary_op],
                 feed_dict={ real_data: heldout_minibatch,
                             real_data_ph: heldout_minibatch,
-                            alphas: alpha_grid
+                            alphas: alpha_grid,
+                            lambda_tf: BLAMBDA
                             })
             summary_writer.add_summary(summary[0], iteration)
 
