@@ -26,11 +26,15 @@ DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
 LAMBDA = 10 # Gradient penalty lambda hyperparameter
+WEIGHT_DECAY_FACTOR = 0
 ITERS = 200000 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
+DIRNAME="pictures"
+if not os.path.exists(DIRNAME):
+    os.mkdir(DIRNAME)
 
 # Set lambda to zero at this iteration; set for -1 to disable
 LAMBDA_TO_ZERO_ITER = -1 
@@ -158,14 +162,28 @@ elif MODE == 'wgan-gp':
         minval=lower_alpha,
         maxval=upper_alpha
     )
-    differences = fake_data - real_data
-    interpolates = real_data + (alpha*differences)
-    gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
-    slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-    gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+    if LAMBDA > 0:
+        differences = fake_data - real_data
+        interpolates = real_data + (alpha*differences)
+        gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
+        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+        gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+        disc_cost += LAMBDA*gradient_penalty
 
-    #disc_cost += LAMBDA*gradient_penalty
-    disc_cost += lambda_tf*gradient_penalty
+    # weight regularization
+    if WEIGHT_DECAY_FACTOR > 0:
+
+        filters = [param for param_name, param in lib._params.iteritems() if param_name.startswith("Discriminator") and param_name.endswith("Filters")]
+        with tf.variable_scope('weights_norm') as scope:
+            weight_loss = tf.reduce_sum(
+                input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
+                    [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in filters]
+                ),
+                name='weight_loss'
+            )
+        disc_cost += weight_loss
+    else:
+        weight_loss = tf.constant(0.0)
 
     gen_optimizer = tf.train.AdamOptimizer(
         learning_rate=1e-4,
@@ -222,11 +240,9 @@ fixed_noise = tf.constant(np.random.normal(size=(128, 128)).astype('float32'))
 fixed_noise_samples = Generator(128, noise=fixed_noise)
 def generate_image(frame, true_dist):
     samples = session.run(fixed_noise_samples)
-    if not os.path.exists('pictures'):
-        os.mkdir('pictures')
     lib.save_images.save_images(
         samples.reshape((128, 28, 28)), 
-        'pictures/samples_lambda0at{}_{}.png'.format(LAMBDA_TO_ZERO_ITER, frame)
+        '{}/samples_{}.png'.format(DIRNAME, frame)
     )
     
 
@@ -330,8 +346,8 @@ with tf.Session() as session:
             disc_iters = CRITIC_ITERS
         for i in xrange(disc_iters):
             _data = gen.next()
-            _disc_cost, _ = session.run(
-                [disc_cost, disc_train_op],
+            _weight_loss, _disc_cost, _ = session.run(
+                [weight_loss, disc_cost, disc_train_op],
                 feed_dict={real_data: _data, lambda_tf: BLAMBDA}
             )
 
@@ -339,6 +355,7 @@ with tf.Session() as session:
                 _ = session.run(clip_disc_weights)
 
         lib.plot.plot('train disc cost', _disc_cost)
+        lib.plot.plot('train weight loss', _weight_loss)
         lib.plot.plot('time', time.time() - start_time)
 
         alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
@@ -356,16 +373,16 @@ with tf.Session() as session:
 
             generate_image(iteration, _data)
 
-            alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
-                feed_dict={
-                            alphas: alpha_grid,
-                            real_data_ph: heldout_minibatch,
-                            lambda_tf: BLAMBDA})
-            alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
-            #print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
+            # alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
+            #     feed_dict={
+            #                 alphas: alpha_grid,
+            #                 real_data_ph: heldout_minibatch,
+            #                 lambda_tf: BLAMBDA})
+            # alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
+#            print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
 
-            np.save(os.path.join(LOG_DIR, 'alpha_to_disc_cost_gp05_%d.npy' % iteration), alpha_to_disc_cost)
-            #print '----- Alpha_to_disc_cost numpy array saved -----'
+#            np.save(os.path.join(LOG_DIR, 'alpha_to_disc_cost_gp05_%d.npy' % iteration), alpha_to_disc_cost)
+#            print '----- Alpha_to_disc_cost numpy array saved -----'
 
             if iteration % 500 == 0:
                 saver = tf.train.Saver()
