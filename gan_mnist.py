@@ -19,22 +19,36 @@ import tflib.save_images
 import tflib.mnist
 import tflib.plot
 
+import tflib.toy_datasets
+
 from tensorflow.contrib.tensorboard.plugins import projector
 
+toy_datasets = ["8gaussians", "25gaussians", "swissroll"]
+
+DATASET = '8gaussians'
 MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
-DIM = 64 # Model dimensionality
-BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
-LAMBDA = 10 # Gradient penalty lambda hyperparameter
-WEIGHT_DECAY_FACTOR = 0
 ITERS = 200000 # How many generator iterations to train for 
-OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
+WEIGHT_DECAY_FACTOR = 0
 DO_BATCHNORM = False
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
 DIRNAME="pictures"
 if not os.path.exists(DIRNAME):
     os.mkdir(DIRNAME)
+
+if DATASET in toy_datasets:
+    LAMBDA = 0.1 # Gradient penalty lambda hyperparameter
+    DIM = 512 # Model dimensionality
+    BATCH_SIZE = 256 # Batch size
+    OUTPUT_DIM = 2
+    Z_DIM = 2
+elif DATASET == "mnist":
+    LAMBDA = 10 # Gradient penalty lambda hyperparameter
+    DIM = 64 # Model dimensionality
+    BATCH_SIZE = 50 # Batch size
+    OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
+    Z_DIM = 128
 
 # Set lambda to zero at this iteration; set for -1 to disable
 LAMBDA_TO_ZERO_ITER = -1 
@@ -68,9 +82,9 @@ def LeakyReLULayer(name, n_in, n_out, inputs):
 
 def Generator(n_samples, noise=None):
     if noise is None:
-        noise = tf.random_normal([n_samples, 128])
+        noise = tf.random_normal([n_samples, Z_DIM])
 
-    output = lib.ops.linear.Linear('Generator.Input', 128, 4*4*4*DIM, noise)
+    output = lib.ops.linear.Linear('Generator.Input', Z_DIM, 4*4*4*DIM, noise)
     if DO_BATCHNORM:
         output = lib.ops.batchnorm.Batchnorm('Generator.BN1', [0], output)
     output = tf.nn.relu(output)
@@ -114,9 +128,34 @@ def Discriminator(inputs):
 
     return tf.reshape(output, [-1])
 
+
+def Generator_Toy_Dense(n_samples, noise=None, real_data=None):
+    if real_data is not None:
+        return real_data + (1.*tf.random_normal(tf.shape(real_data)))
+    else:
+        if noise is None:
+            noise = tf.random_normal([n_samples, Z_DIM])
+        output = ReLULayer('Generator.1', Z_DIM, DIM, noise)
+        output = ReLULayer('Generator.2', DIM, DIM, output)
+        output = ReLULayer('Generator.3', DIM, DIM, output)
+        output = lib.ops.linear.Linear('Generator.4', DIM, 2, output)
+        return output
+
+def Discriminator_Toy_Dense(inputs):
+    output = tf.reshape(inputs, [-1, 2])
+    output = ReLULayer('Discriminator.1', 2, DIM, output)
+    output = ReLULayer('Discriminator.2', DIM, DIM, output)
+    output = ReLULayer('Discriminator.3', DIM, DIM, output)
+    output = lib.ops.linear.Linear('Discriminator.4', DIM, 1, output)
+    return tf.reshape(output, [-1])
+
+if DATASET in toy_datasets:
+    Discriminator = Discriminator_Toy_Dense
+    Generator = Generator_Toy_Dense
+
 lambda_tf = tf.placeholder(tf.float32, shape=[])
 
-real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
+real_data = tf.placeholder(tf.float32, shape=[None, OUTPUT_DIM])
 fake_data = Generator(BATCH_SIZE)
 
 disc_real = Discriminator(real_data)
@@ -236,22 +275,28 @@ elif MODE == 'dcgan':
     clip_disc_weights = None
 
 # For saving samples
-fixed_noise = tf.constant(np.random.normal(size=(128, 128)).astype('float32'))
+fixed_noise = tf.constant(np.random.normal(size=(128, Z_DIM)).astype('float32'))
 fixed_noise_samples = Generator(128, noise=fixed_noise)
-def generate_image(frame, true_dist):
+def mnist_generate_image(frame, true_dist):
     samples = session.run(fixed_noise_samples)
     lib.save_images.save_images(
         samples.reshape((128, 28, 28)), 
         '{}/samples_{}.png'.format(DIRNAME, frame)
     )
-    
 
-# Dataset iterator
-train_gen, dev_gen, test_gen = lib.mnist.load(BATCH_SIZE, BATCH_SIZE)
-def inf_train_gen():
-    while True:
-        for images,targets in train_gen():
-            yield images
+def data_and_visualiser_factory(dataset):
+    
+    if DATASET == "mnist":
+        inf_train_gen, dev_gen, test_gen = lib.mnist.load(BATCH_SIZE, BATCH_SIZE)
+        return (inf_train_gen, dev_gen, mnist_generate_image)
+
+    elif DATASET in ["25gaussians", "swissroll", "8gaussians"]:
+        inf_train_gen = lib.toy_datasets.inf_gen(DATASET, BATCH_SIZE)
+        dev_gen = lib.toy_datasets.inf_gen(DATASET, BATCH_SIZE, 5000)
+        test_gen = lib.toy_datasets.inf_gen(DATASET, BATCH_SIZE, 5000)
+        return (inf_train_gen, dev_gen, lib.toy_datasets.generate_image)
+
+(inf_train_gen, dev_gen, generate_image) = data_and_visualiser_factory(DATASET)
 
 # Train loop
 with tf.Session() as session:
@@ -260,11 +305,11 @@ with tf.Session() as session:
     #session.run(tf.initialize_all_variables())
 
     if MODE=='wgan-gp':
-        session_name = "%s-%f-%f-lambda%f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
+        session_name = "%s-%s-%f-%f-lambda%f" % (DATASET, MODE, lower_alpha, upper_alpha, LAMBDA)
     elif MODE=='wgan':
-        session_name = "%s-batchnorm=%s" % (MODE, DO_BATCHNORM)
+        session_name = "%s-%s-batchnorm=%s" % (DATASET, MODE, DO_BATCHNORM)
     elif MODE=='dcgan':
-        session_name = "%s" % (MODE)
+        session_name = "%s-%s" % (DATASET, MODE)
 
     LOG_DIR = "logs/%s" % session_name
 
@@ -295,13 +340,13 @@ with tf.Session() as session:
 
     alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
     alphas1 = tf.expand_dims(alphas, axis=-1)
-    real_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, 784))
+    real_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, OUTPUT_DIM))
     real_data_ph1 = tf.expand_dims(real_data_ph, axis=1)
     fake_data = Generator(BATCH_SIZE)
-    fake_data = tf.expand_dims(fake_data, axis=1)
+    fake_data_expanded = tf.expand_dims(fake_data, axis=1)
 
-    x = alphas1*fake_data + (1-alphas1)*real_data_ph1
 
+    x = alphas1*fake_data_expanded + (1-alphas1)*real_data_ph1
     alpha_to_disc_cost_op = Discriminator(x)
 
     grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)[0]
@@ -317,7 +362,8 @@ with tf.Session() as session:
     tf.summary.histogram("unidirectional_grad_at_alpha0", grad_by_alphas[:, 0])
     tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
 
-    tf.summary.image("generated", tf.reshape(fixed_noise_samples, (128, 28, 28, 1)), max_outputs=50)
+    if DATASET == "mnist":
+        tf.summary.image("generated", tf.reshape(fixed_noise_samples, (128, 28, 28, 1)), max_outputs=50)
 
     merged_summary_op = tf.summary.merge_all()
 
@@ -345,7 +391,7 @@ with tf.Session() as session:
         else:
             disc_iters = CRITIC_ITERS
         for i in xrange(disc_iters):
-            _data = gen.next()
+            _data, _ = gen.next()
             _weight_loss, _disc_cost, _ = session.run(
                 [weight_loss, disc_cost, disc_train_op],
                 feed_dict={real_data: _data, lambda_tf: BLAMBDA}
@@ -360,7 +406,7 @@ with tf.Session() as session:
 
         alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
 
-        # Calculate dev loss and generate samples every 100 iters
+        # Calculate dev loss and generate samples every 100
         if iteration < 5 or iteration % 100 == 0:
             dev_disc_costs = []
             for images,_ in dev_gen():
@@ -371,7 +417,10 @@ with tf.Session() as session:
                 dev_disc_costs.append(_dev_disc_cost)
             lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
 
-            generate_image(iteration, _data)
+            if DATASET in toy_datasets:
+                generate_image(session, _data, real_data, fake_data, disc_real, iteration)
+            else:
+                generate_image(iteration, _data)
 
             # alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
             #     feed_dict={
@@ -379,10 +428,10 @@ with tf.Session() as session:
             #                 real_data_ph: heldout_minibatch,
             #                 lambda_tf: BLAMBDA})
             # alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
-#            print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
+            # print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
 
-#            np.save(os.path.join(LOG_DIR, 'alpha_to_disc_cost_gp05_%d.npy' % iteration), alpha_to_disc_cost)
-#            print '----- Alpha_to_disc_cost numpy array saved -----'
+            # np.save(os.path.join(LOG_DIR, 'alpha_to_disc_cost_gp05_%d.npy' % iteration), alpha_to_disc_cost)
+            # print '----- Alpha_to_disc_cost numpy array saved -----'
 
             if iteration % 500 == 0:
                 saver = tf.train.Saver()
