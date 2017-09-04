@@ -30,6 +30,8 @@ WEIGHT_DECAY_FACTOR = 0
 ITERS = 200000 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
+ACTIVATION_PENALTY = 0.0
+USE_DENSE_DISCRIMINIATOR = False
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
 DIRNAME="pictures"
@@ -114,16 +116,32 @@ def Discriminator(inputs):
 
     return tf.reshape(output, [-1])
 
+def Dense_Discriminator(inputs):
+    output = tf.reshape(inputs, [-1, 28*28])
+
+    output = lib.ops.linear.Linear('Discriminator.1', 28*28, 1000, output)
+    output = LeakyReLU(output)
+    output = lib.ops.linear.Linear('Discriminator.2', 1000, 1000, output)
+    output = LeakyReLU(output)
+    output = lib.ops.linear.Linear('Discriminator.output', 1000, 1, output)
+    return tf.reshape(output, [-1])
+
 lambda_tf = tf.placeholder(tf.float32, shape=[])
 
 real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
 fake_data = Generator(BATCH_SIZE)
+
+if USE_DENSE_DISCRIMINIATOR:
+    Discriminator = Dense_Discriminator
 
 disc_real = Discriminator(real_data)
 disc_fake = Discriminator(fake_data)
 
 gen_params = lib.params_with_name('Generator')
 disc_params = lib.params_with_name('Discriminator')
+
+def activation_to_loss(activation):
+    return tf.reduce_mean(tf.maximum(0.0,tf.square(activation) - 1.0))
 
 if MODE == 'wgan':
     gen_cost = -tf.reduce_mean(disc_fake)
@@ -151,8 +169,9 @@ if MODE == 'wgan':
             )
         )
     clip_disc_weights = tf.group(*clip_ops)
-
-elif MODE == 'wgan-gp':
+    weight_loss = tf.constant(0.0)
+    
+elif MODE == 'wgan-gp':    
     gen_cost = -tf.reduce_mean(disc_fake)
     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
@@ -162,13 +181,19 @@ elif MODE == 'wgan-gp':
         minval=lower_alpha,
         maxval=upper_alpha
     )
-    if LAMBDA > 0:
+    if (ACTIVATION_PENALTY > 0) or (LAMBDA > 0):
         differences = fake_data - real_data
         interpolates = real_data + (alpha*differences)
-        gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-        gradient_penalty = tf.reduce_mean((slopes-1.)**2)
-        disc_cost += LAMBDA*gradient_penalty
+        
+        if ACTIVATION_PENALTY > 0:
+            activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY))
+            disc_cost += activation_loss
+    
+        if LAMBDA > 0:
+            gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+            gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+            disc_cost += LAMBDA*gradient_penalty
 
     # weight regularization
     if WEIGHT_DECAY_FACTOR > 0:
