@@ -140,6 +140,9 @@ disc_fake = Discriminator(fake_data)
 gen_params = lib.params_with_name('Generator')
 disc_params = lib.params_with_name('Discriminator')
 
+disc_filters = [param for param_name, param in lib._params.iteritems() if param_name.startswith("Discriminator") and param_name.endswith("Filters")]
+
+
 def activation_to_loss(activation):
     return tf.reduce_mean(tf.maximum(0.0,tf.square(activation) - 1.0))
 
@@ -198,11 +201,10 @@ elif MODE == 'wgan-gp':
     # weight regularization
     if WEIGHT_DECAY_FACTOR > 0:
 
-        filters = [param for param_name, param in lib._params.iteritems() if param_name.startswith("Discriminator") and param_name.endswith("Filters")]
         with tf.variable_scope('weights_norm') as scope:
             weight_loss = tf.reduce_sum(
                 input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
-                    [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in filters]
+                    [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
                 ),
                 name='weight_loss'
             )
@@ -332,7 +334,7 @@ with tf.Session() as session:
     grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)[0]
 
     grad_by_x = tf.gradients(Discriminator(x), [x])[0]
-    slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[1]))
+    slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[2]))
 
     tf.summary.histogram("slopes_for_all_alphas", slopes_for_alphas)
     tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
@@ -397,6 +399,32 @@ with tf.Session() as session:
             lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
 
             generate_image(iteration, _data)
+            
+            # get slopes
+            _slopes_for_alphas = session.run([slopes_for_alphas],
+                                            feed_dict={alphas:alpha_grid,
+                                                       real_data_ph:heldout_minibatch,
+                                                       lambda_tf: BLAMBDA}
+            )
+            _slopes_for_alphas = _slopes_for_alphas[0]
+            # add some noise to the discriminator weights
+            noises = []
+            for filter in disc_filters:
+                noise = tf.random_normal(filter.shape)
+                noises.append(noise)
+                filter += noise
+            # get slopes
+            _slopes_for_alphas2 = session.run([slopes_for_alphas],
+                                            feed_dict={alphas:alpha_grid,
+                                                       real_data_ph:heldout_minibatch,
+                                                       lambda_tf: BLAMBDA}
+            )
+            _slopes_for_alphas2 = _slopes_for_alphas2[0]
+            print("Slopes before noise: ", np.mean(_slopes_for_alphas[:,::20], axis=0))
+            print("Slopes after  noise: ", np.mean(_slopes_for_alphas2[:,::20], axis=0))
+            # subtract the given noise from the discriminator weights
+            for i, filter in enumerate(disc_filters):
+                filter -= noises[i]
 
             # alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
             #     feed_dict={
