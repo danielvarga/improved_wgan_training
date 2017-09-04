@@ -98,15 +98,15 @@ def Generator(n_samples, noise=None):
 def Discriminator(inputs):
     output = tf.reshape(inputs, [-1, 1, 28, 28])
 
-    output = lib.ops.conv2d.Conv2D('Discriminator.1',1,DIM,5,output,stride=2)
+    output = lib.ops.conv2d.Conv2D('Discriminator.1',1,DIM,5,output,stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
     output = LeakyReLU(output)
 
-    output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=2)
+    output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
     if DO_BATCHNORM:
         output = lib.ops.batchnorm.Batchnorm('Discriminator.BN2', [0,2,3], output)
     output = LeakyReLU(output)
 
-    output = lib.ops.conv2d.Conv2D('Discriminator.3', 2*DIM, 4*DIM, 5, output, stride=2)
+    output = lib.ops.conv2d.Conv2D('Discriminator.3', 2*DIM, 4*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
     if DO_BATCHNORM:
         output = lib.ops.batchnorm.Batchnorm('Discriminator.BN3', [0,2,3], output)
     output = LeakyReLU(output)
@@ -126,6 +126,7 @@ def Dense_Discriminator(inputs):
     output = lib.ops.linear.Linear('Discriminator.output', 1000, 1, output)
     return tf.reshape(output, [-1])
 
+WEIGHT_NOISE_SIGMA = tf.placeholder(tf.float32, shape=[])
 lambda_tf = tf.placeholder(tf.float32, shape=[])
 
 real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
@@ -365,7 +366,7 @@ with tf.Session() as session:
         #print BLAMBDA.shape
 
         if iteration > 0:
-            _ = session.run(gen_train_op)
+            _ = session.run(gen_train_op, feed_dict={WEIGHT_NOISE_SIGMA:0.0})
 
         if MODE == 'dcgan':
             disc_iters = 1
@@ -375,7 +376,7 @@ with tf.Session() as session:
             _data = gen.next()
             _weight_loss, _disc_cost, _ = session.run(
                 [weight_loss, disc_cost, disc_train_op],
-                feed_dict={real_data: _data, lambda_tf: BLAMBDA}
+                feed_dict={real_data: _data, lambda_tf: BLAMBDA, WEIGHT_NOISE_SIGMA:0.0}
             )
 
             if clip_disc_weights is not None:
@@ -393,7 +394,7 @@ with tf.Session() as session:
             for images,_ in dev_gen():
                 _dev_disc_cost = session.run(
                     disc_cost, 
-                    feed_dict={real_data: images, lambda_tf: BLAMBDA}
+                    feed_dict={real_data: images, lambda_tf: BLAMBDA, WEIGHT_NOISE_SIGMA:0.0}
                 )
                 dev_disc_costs.append(_dev_disc_cost)
             lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
@@ -404,28 +405,23 @@ with tf.Session() as session:
             _slopes_for_alphas = session.run([slopes_for_alphas],
                                             feed_dict={alphas:alpha_grid,
                                                        real_data_ph:heldout_minibatch,
-                                                       lambda_tf: BLAMBDA}
+                                                       lambda_tf: BLAMBDA,
+                                                       WEIGHT_NOISE_SIGMA:0.0
+                                            }
             )
             _slopes_for_alphas = _slopes_for_alphas[0]
-            # add some noise to the discriminator weights
-            noises = []
-            for filter in disc_filters:
-                noise = tf.random_normal(filter.shape)
-                noises.append(noise)
-                filter += noise
-            # get slopes
             _slopes_for_alphas2 = session.run([slopes_for_alphas],
                                             feed_dict={alphas:alpha_grid,
                                                        real_data_ph:heldout_minibatch,
-                                                       lambda_tf: BLAMBDA}
+                                                       lambda_tf: BLAMBDA,
+                                                       WEIGHT_NOISE_SIGMA:0.1
+                                            }
             )
             _slopes_for_alphas2 = _slopes_for_alphas2[0]
             print("Slopes before noise: ", np.mean(_slopes_for_alphas[:,::20], axis=0))
             print("Slopes after  noise: ", np.mean(_slopes_for_alphas2[:,::20], axis=0))
-            # subtract the given noise from the discriminator weights
-            for i, filter in enumerate(disc_filters):
-                filter -= noises[i]
 
+            
             # alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
             #     feed_dict={
             #                 alphas: alpha_grid,
@@ -445,7 +441,8 @@ with tf.Session() as session:
                 feed_dict={ real_data: heldout_minibatch,
                             real_data_ph: heldout_minibatch,
                             alphas: alpha_grid,
-                            lambda_tf: BLAMBDA
+                            lambda_tf: BLAMBDA,
+                            WEIGHT_NOISE_SIGMA:0.0
                             })
             summary_writer.add_summary(summary[0], iteration)
 
