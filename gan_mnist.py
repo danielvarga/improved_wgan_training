@@ -285,9 +285,13 @@ def mnist_generate_image(frame, true_dist):
     )
 
 def data_and_visualiser_factory(dataset):
-    
+
     if DATASET == "mnist":
-        inf_train_gen, dev_gen, test_gen = lib.mnist.load(BATCH_SIZE, BATCH_SIZE)
+        train_gen, dev_gen, test_gen = lib.mnist.load(BATCH_SIZE, BATCH_SIZE)
+        def inf_train_gen():
+            while True:
+                for images,targets in train_gen():
+                    yield images, None
         return (inf_train_gen, dev_gen, mnist_generate_image)
 
     elif DATASET in ["25gaussians", "swissroll", "8gaussians"]:
