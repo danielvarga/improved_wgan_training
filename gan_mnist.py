@@ -60,13 +60,14 @@ lib.print_model_settings(locals().copy())
 def LeakyReLU(x, alpha=0.2):
     return tf.maximum(alpha*x, x)
 
-def ReLULayer(name, n_in, n_out, inputs):
+def ReLULayer(name, n_in, n_out, inputs, biases=True):
     output = lib.ops.linear.Linear(
         name+'.Linear', 
         n_in, 
         n_out, 
         inputs,
-        initialization='he'
+        initialization='he',
+        biases=biases
     )
     return tf.nn.relu(output)
 
@@ -107,6 +108,7 @@ def Generator(n_samples, noise=None):
 
     return tf.reshape(output, [-1, OUTPUT_DIM])
 
+
 def Discriminator(inputs):
     output = tf.reshape(inputs, [-1, 1, 28, 28])
 
@@ -141,12 +143,27 @@ def Generator_Toy_Dense(n_samples, noise=None, real_data=None):
         output = lib.ops.linear.Linear('Generator.4', DIM, 2, output)
         return output
 
+layer_outputs = []
+
 def Discriminator_Toy_Dense(inputs):
     output = tf.reshape(inputs, [-1, 2])
-    output = ReLULayer('Discriminator.1', 2, DIM, output)
-    output = ReLULayer('Discriminator.2', DIM, DIM, output)
-    output = ReLULayer('Discriminator.3', DIM, DIM, output)
-    output = lib.ops.linear.Linear('Discriminator.4', DIM, 1, output)
+
+    output = ReLULayer('Discriminator.1', 2, DIM, output, biases=False)
+    if len(layer_outputs)<1:
+        layer_outputs.append(output)
+
+    output = ReLULayer('Discriminator.2', DIM, DIM, output, biases=False)
+    if len(layer_outputs)<2:
+        layer_outputs.append(output)
+    
+    output = ReLULayer('Discriminator.3', DIM, DIM, output, biases=True)
+    if len(layer_outputs)<3:
+        layer_outputs.append(output)
+    
+    output = lib.ops.linear.Linear('Discriminator.4', DIM, 1, output, biases=True)
+    if len(layer_outputs)<4:
+        layer_outputs.append(output)
+
     return tf.reshape(output, [-1])
 
 if DATASET in toy_datasets:
@@ -349,7 +366,7 @@ with tf.Session() as session:
     fake_data = Generator(BATCH_SIZE)
     fake_data_expanded = tf.expand_dims(fake_data, axis=1)
 
-
+    """
     x = alphas1*fake_data_expanded + (1-alphas1)*real_data_ph1
     alpha_to_disc_cost_op = Discriminator(x)
 
@@ -365,7 +382,7 @@ with tf.Session() as session:
     tf.summary.histogram("unidirectional_grad_at_all_alphas", grad_by_alphas)
     tf.summary.histogram("unidirectional_grad_at_alpha0", grad_by_alphas[:, 0])
     tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
-
+    """
     if DATASET == "mnist":
         tf.summary.image("generated", tf.reshape(fixed_noise_samples, (128, 28, 28, 1)), max_outputs=50)
 
@@ -375,6 +392,11 @@ with tf.Session() as session:
 
     for heldout_minibatch, _ in dev_gen():
         break
+
+    gradients = tf.gradients(Discriminator(real_data), [real_data])[0]
+    slopes = tf.reduce_sum(gradients, reduction_indices=[1]);
+    slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+
 
     for iteration in xrange(ITERS):
         start_time = time.time()
@@ -410,8 +432,46 @@ with tf.Session() as session:
 
         alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
 
+
+
         # Calculate dev loss and generate samples every 100
-        if iteration < 5 or iteration % 100 == 0:
+        if iteration < 1 or iteration % 100 == 0:
+
+            pnames = ["Discriminator.1.Linear.W", "Discriminator.2.Linear.W", "Discriminator.3.Linear.W", "Discriminator.4.W"]
+            ws = [lib.params_with_name(pn)[0] for pn in pnames]
+            
+            for images,_ in dev_gen():
+              if iteration % 100 == 0 and iteration > 1:              
+                ws_np = session.run(ws, feed_dict={real_data: images, lambda_tf: BLAMBDA})
+                slopes_np = session.run(slopes, feed_dict={real_data: images, lambda_tf: BLAMBDA})
+                layer_outputs_np = session.run(layer_outputs, feed_dict={real_data: images, lambda_tf: BLAMBDA, real_data_ph: images})
+                print "Slopes at real data (by tensorflow):", slopes_np
+                for p in range(BATCH_SIZE):
+                    paths = None
+                    sum_batch = 0.0
+                    for i, layer_output_np in enumerate(layer_outputs_np):
+                        layer_output_np = layer_output_np[p]
+                        layer_output_np[layer_output_np > 0.0] = 1.0
+                        if ws_np[i].shape[1] != 1:
+                            diag = np.diag(layer_output_np)
+                            xx = np.transpose(np.matmul(diag, np.transpose(ws_np[i])))
+                        else:
+                            xx = ws_np[i]
+                                                    
+                        if paths is None:
+                            paths = xx
+                        else:
+                            paths = np.expand_dims(paths, -1)
+                            paths = np.repeat(paths, xx.shape[1], axis=-1)
+                            paths = np.multiply(paths, xx)
+                        print(paths.nbytes)
+                        axes = tuple([i for i in range(1,len(paths.shape))])
+                        sum_image = np.sqrt(np.sum(np.square(np.sum(paths, axis=axes ))))
+                        print("sum_image:", sum_image)
+                        sum_batch += sum_image
+                print(sum_batch / BATCH_SIZE)
+                break
+
             dev_disc_costs = []
             for images,_ in dev_gen():
                 _dev_disc_cost = session.run(
