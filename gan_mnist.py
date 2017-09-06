@@ -21,20 +21,24 @@ import tflib.plot
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
-MODE = 'wgan' # dcgan, wgan, or wgan-gp
+MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
 LAMBDA = 10 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
-ITERS = 200000 # How many generator iterations to train for 
+ITERS = 20000 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
 USE_DENSE_DISCRIMINIATOR = False
+GRADIENT_SHRINKING = False
+SHRINKING_REDUCTOR = "max" # "max", "mean", "softmax"
+lower_alpha, upper_alpha = 1.0, 1.0
+
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
-DIRNAME="pictures/mnist_wgan"
+DIRNAME="pictures"
 if not os.path.exists(DIRNAME):
     os.mkdir(DIRNAME)
 
@@ -181,25 +185,39 @@ elif MODE == 'wgan-gp':
     gen_cost = -tf.reduce_mean(disc_fake)
     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
-    lower_alpha, upper_alpha = 0.0, 1.0
     alpha = tf.random_uniform(
         shape=[BATCH_SIZE,1], 
         minval=lower_alpha,
         maxval=upper_alpha
     )
-    if (ACTIVATION_PENALTY > 0) or (LAMBDA > 0):
-        differences = fake_data - real_data
-        interpolates = real_data + (alpha*differences)
-        
-        if ACTIVATION_PENALTY > 0:
-            activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY))
-            disc_cost += activation_loss
+
+    differences = fake_data - real_data
+    interpolates = real_data + (alpha*differences)
+    gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
+    slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     
-        if LAMBDA > 0:
-            gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
-            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-            gradient_penalty = tf.reduce_mean((slopes-1.)**2)
-            disc_cost += LAMBDA*gradient_penalty
+    if GRADIENT_SHRINKING:
+        print "gradient shrinking"
+        if SHRINKING_REDUCTOR == "mean":
+            grad_norm = tf.reduce_mean(slopes)
+        elif SHRINKING_REDUCTOR == "max":
+            grad_norm = tf.reduce_max(slopes)
+        elif SHRINKING_REDUCTOR == "softmax":
+            grad_norm = tf.nn.softmax(slopes)
+
+        disc_real /= grad_norm
+        disc_fake /= grad_norm
+        disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
+        gen_cost = -tf.reduce_mean(disc_fake)            
+        
+    if ACTIVATION_PENALTY > 0:
+        activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY))
+        disc_cost += activation_loss
+    
+    if LAMBDA > 0:
+        gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+        disc_cost += LAMBDA*gradient_penalty
+        
 
     # weight regularization
     if WEIGHT_DECAY_FACTOR > 0:
@@ -291,7 +309,10 @@ with tf.Session() as session:
     #session.run(tf.initialize_all_variables())
 
     if MODE=='wgan-gp':
-        session_name = "%s-%f-%f-lambda%f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
+        if GRADIENT_SHRINKING:
+            session_name = "%s-%.2f-%.2f-lambda%.2f-%s" % (MODE, lower_alpha, upper_alpha, LAMBDA, SHRINKING_REDUCTOR)
+        else:
+            session_name = "%s-%.2f-%.2f-lambda%.2f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
     elif MODE=='wgan':
         session_name = "%s-batchnorm=%s" % (MODE, DO_BATCHNORM)
     elif MODE=='dcgan':
@@ -369,7 +390,11 @@ with tf.Session() as session:
         #print BLAMBDA.shape
 
         if iteration > 0:
-            _ = session.run(gen_train_op, feed_dict={WEIGHT_NOISE_SIGMA:0.0})
+            _ = session.run(gen_train_op,
+                            feed_dict={
+                                real_data:_data,
+                                WEIGHT_NOISE_SIGMA:0.0}
+            )
 
         if MODE == 'dcgan':
             disc_iters = 1
@@ -417,7 +442,7 @@ with tf.Session() as session:
                                             feed_dict={alphas:alpha_grid,
                                                        real_data_ph:heldout_minibatch,
                                                        lambda_tf: BLAMBDA,
-                                                       WEIGHT_NOISE_SIGMA:0.1
+                                                       WEIGHT_NOISE_SIGMA:0.01
                                             }
             )
             _slopes_for_alphas2 = _slopes_for_alphas2[0]
