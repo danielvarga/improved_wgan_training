@@ -21,7 +21,7 @@ import tflib.plot
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
-MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
+MODE = 'wgan' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
@@ -34,9 +34,12 @@ ACTIVATION_PENALTY = 0.0
 USE_DENSE_DISCRIMINIATOR = False
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
-DIRNAME="pictures"
+DIRNAME="pictures/mnist_wgan"
 if not os.path.exists(DIRNAME):
     os.mkdir(DIRNAME)
+
+# this placeholder controls whether we add some noise to the weights of convolutional filters in the discriminator
+WEIGHT_NOISE_SIGMA = tf.placeholder(tf.float32, shape=[])
 
 # Set lambda to zero at this iteration; set for -1 to disable
 LAMBDA_TO_ZERO_ITER = -1 
@@ -126,7 +129,6 @@ def Dense_Discriminator(inputs):
     output = lib.ops.linear.Linear('Discriminator.output', 1000, 1, output)
     return tf.reshape(output, [-1])
 
-WEIGHT_NOISE_SIGMA = tf.placeholder(tf.float32, shape=[])
 lambda_tf = tf.placeholder(tf.float32, shape=[])
 
 real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
@@ -262,6 +264,7 @@ elif MODE == 'dcgan':
     disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
 
     clip_disc_weights = None
+    weight_loss = tf.constant(0.0)
 
 # For saving samples
 fixed_noise = tf.constant(np.random.normal(size=(128, 128)).astype('float32'))
