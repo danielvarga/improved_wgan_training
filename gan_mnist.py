@@ -33,8 +33,8 @@ DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
 USE_DENSE_DISCRIMINIATOR = False
 GRADIENT_SHRINKING = False
-SHRINKING_REDUCTOR = "max" # "max", "mean", "softmax"
-lower_alpha, upper_alpha = 1.0, 1.0
+SHRINKING_REDUCTOR = "none" # "none", "max", "mean", "softmax"
+lower_alpha, upper_alpha = 0.0, 1.0
 
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
@@ -194,6 +194,10 @@ elif MODE == 'wgan-gp':
     differences = fake_data - real_data
     interpolates = real_data + (alpha*differences)
     gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
+    # noise = tf.random_normal([BATCH_SIZE, 128])
+    # fake_images = Generator(128, noise)
+    # gradients = tf.gradients(Discriminator(fake_images), [noise])[0]
+
     slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     
     if GRADIENT_SHRINKING:
@@ -204,6 +208,8 @@ elif MODE == 'wgan-gp':
             grad_norm = tf.reduce_max(slopes)
         elif SHRINKING_REDUCTOR == "softmax":
             grad_norm = tf.nn.softmax(slopes)
+        elif SHRINKING_REDUCTOR == "none":
+            grad_norm = slopes
 
         disc_real /= grad_norm
         disc_fake /= grad_norm
