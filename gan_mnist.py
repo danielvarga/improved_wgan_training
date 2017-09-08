@@ -33,7 +33,7 @@ DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
 USE_DENSE_DISCRIMINIATOR = False
 GRADIENT_SHRINKING = False
-SHRINKING_REDUCTOR = "none" # "none", "max", "mean", "softmax"
+SHRINKING_REDUCTOR = "mean" # "none", "max", "mean", "softmax"
 lower_alpha, upper_alpha = 0.0, 1.0
 
 if DO_BATCHNORM:
@@ -367,6 +367,11 @@ with tf.Session() as session:
     grad_by_x = tf.gradients(Discriminator(x), [x])[0]
     slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[2]))
 
+    x2 = tf.random_uniform(x.shape, minval=-1, maxval=1)
+    grad_by_x2 = tf.gradients(Discriminator(x2), [x2])[0]
+    slopes_for_x2 = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x2), reduction_indices=[2]))
+    tf.summary.histogram("slopes_at_random", slopes_for_x2)
+    
     tf.summary.histogram("slopes_for_all_alphas", slopes_for_alphas)
     tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
     tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
