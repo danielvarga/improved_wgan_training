@@ -201,7 +201,7 @@ elif MODE == 'wgan-gp':
     slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
 
     # create an op that reduces "slopes"
-    slope_optimizer = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+    slope_optimizer = tf.train.GradientDescentOptimizer(learning_rate=5e-5)
     slope_gvs = slope_optimizer.compute_gradients(tf.reduce_mean(slopes), var_list=disc_params)
     slope_train_op = slope_optimizer.apply_gradients(slope_gvs)
     
@@ -364,12 +364,10 @@ with tf.Session() as session:
     fake_data = tf.expand_dims(fake_data, axis=1)
 
     # compute slopes at random_images_ph
-    random_image_count = 1000
+    random_image_count = 10000
     random_images = np.random.uniform(-1, 1, (random_image_count, OUTPUT_DIM))
     random_images_ph = tf.placeholder(tf.float32, shape=(random_image_count, OUTPUT_DIM))
-    grad_at_random = tf.gradients(Discriminator(random_images_ph), [random_images_ph])
-    print grad_at_random.shape
-    xxx
+    grad_at_random = tf.gradients(Discriminator(random_images_ph), [random_images_ph])[0]
     slopes_at_random = tf.sqrt(tf.reduce_sum(tf.square(grad_at_random), reduction_indices=[1]))
 
     x = alphas1*fake_data + (1-alphas1)*real_data_ph1
@@ -443,12 +441,15 @@ with tf.Session() as session:
 
         # check what happens if we make a single sgd step towards reducing slopes
         if iteration % 500 == 0:
-            slopes_before = session.run(slopes_at_random, feed_dict={random_images_ph:random_images})
+            slopes_before = session.run(slopes_at_random, feed_dict={random_images_ph:random_images, WEIGHT_NOISE_SIGMA:0.0})
             session.run(slope_train_op,
-                        feed_dict={real_data:images, lambda_tf:BLAMBDA, WEIGHT_NOISE_SIGMA:0.0}
+                        feed_dict={real_data:_data, lambda_tf:BLAMBDA, WEIGHT_NOISE_SIGMA:0.0}
                         )
-            slopes_after = session.run(slopes_at_random, feed_dict={random_images_ph:random_images})
-            xxx
+            slopes_after = session.run(slopes_at_random, feed_dict={random_images_ph:random_images,  WEIGHT_NOISE_SIGMA:0.0})
+            slope_deltas = slopes_after - slopes_before
+            print "Avg slope increase: ", np.mean(slope_deltas)
+            print "Avg slope change squared: ", np.mean(np.square(slope_deltas))
+            print "Pct of slope increases: ", 100.0 * np.sum(slope_deltas > 0) / np.size(slope_deltas)
             
         # Calculate dev loss and generate samples every 100 iters
         if iteration < 5 or iteration % 100 == 0:
