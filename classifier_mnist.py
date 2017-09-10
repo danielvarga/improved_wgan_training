@@ -23,17 +23,17 @@ from keras.datasets import mnist
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
-MODE = 'dcgan' # dcgan, wgan, or wgan-gp
+MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
 LAMBDA = 10 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
-ITERS = 8000 # How many generator iterations to train for 
+ITERS = 1000 # How many generator iterations to train for
 OUTPUT_DIM = 28*28 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
-USE_DENSE_DISCRIMINIATOR = False
+USE_DENSE_DISCRIMINIATOR = True
 GRADIENT_SHRINKING = False
 SHRINKING_REDUCTOR = "mean" # "none", "max", "mean", "softmax"
 lower_alpha, upper_alpha = 0.0, 1.0
@@ -275,6 +275,11 @@ def load(target_digits):
     X_test /= 255
     reals_train = X_train[y_train==target_digits[0]]
     fakes_train = X_train[y_train==target_digits[1]]
+
+    trunc = 50 # circa 5500 is the untruncated size.
+    reals_train = reals_train[:trunc]
+    fakes_train = fakes_train[:trunc]
+
     reals_test  = X_test [y_test ==target_digits[0]]
     fakes_test  = X_test [y_test ==target_digits[1]]
     return (reals_train, fakes_train), (reals_test, fakes_test)
@@ -410,8 +415,8 @@ with tf.Session() as session:
 
             dev_real_disc_outputs = np.concatenate(dev_real_disc_outputs)
             dev_fake_disc_outputs = np.concatenate(dev_fake_disc_outputs)
-            print "REAL", dev_real_disc_outputs[:20], dev_real_disc_outputs.shape
-            print "FAKE", dev_fake_disc_outputs[:20], dev_fake_disc_outputs.shape
+            # print "REAL", dev_real_disc_outputs[:20], dev_real_disc_outputs.shape
+            # print "FAKE", dev_fake_disc_outputs[:20], dev_fake_disc_outputs.shape
             print "DEVEL ACCURACY", accuracy(dev_real_disc_outputs, dev_fake_disc_outputs)
 
             lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
