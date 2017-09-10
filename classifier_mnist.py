@@ -33,7 +33,7 @@ ITERS = 1000 # How many generator iterations to train for
 OUTPUT_DIM = 28*28 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
-USE_DENSE_DISCRIMINIATOR = True
+USE_DENSE_DISCRIMINIATOR = False
 GRADIENT_SHRINKING = False
 SHRINKING_REDUCTOR = "mean" # "none", "max", "mean", "softmax"
 lower_alpha, upper_alpha = 0.0, 1.0
@@ -197,7 +197,7 @@ elif MODE == 'wgan-gp':
         elif SHRINKING_REDUCTOR == "max":
             grad_norm = tf.reduce_max(slopes)
         elif SHRINKING_REDUCTOR == "softmax":
-            grad_norm = tf.nn.softmax(slopes)
+            grad_norm = tf.reduce_logsumexp(slopes)
         elif SHRINKING_REDUCTOR == "none":
             grad_norm = slopes
 

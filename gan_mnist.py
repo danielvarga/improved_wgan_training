@@ -207,7 +207,7 @@ elif MODE == 'wgan-gp':
         elif SHRINKING_REDUCTOR == "max":
             grad_norm = tf.reduce_max(slopes)
         elif SHRINKING_REDUCTOR == "softmax":
-            grad_norm = tf.nn.softmax(slopes)
+            grad_norm = tf.reduce_logsumexp(slopes)
         elif SHRINKING_REDUCTOR == "none":
             grad_norm = slopes
 
