@@ -212,7 +212,6 @@ elif MODE == 'wgan-gp':
     if LAMBDA > 0:
         gradient_penalty = tf.reduce_mean((slopes-1.)**2)
         disc_cost += LAMBDA*gradient_penalty
-        
 
     # weight regularization
     if WEIGHT_DECAY_FACTOR > 0:
@@ -227,6 +226,13 @@ elif MODE == 'wgan-gp':
         disc_cost += weight_loss
     else:
         weight_loss = tf.constant(0.0)
+
+    HARD_MARGIN_WEIGHT = 0.0
+    if HARD_MARGIN_WEIGHT != 0:
+        print "!!!!!!!!!!!!!!!!"
+        print "wgan-g* with hard margin loss, weight", HARD_MARGIN_WEIGHT
+        hard_margin_loss = (tf.reduce_max(disc_fake) - tf.reduce_min(disc_real))
+        disc_cost += HARD_MARGIN_WEIGHT * hard_margin_loss
 
     disc_optimizer = tf.train.AdamOptimizer(
         learning_rate=1e-4,
@@ -248,6 +254,13 @@ elif MODE == 'dcgan':
         labels=tf.ones_like(disc_real)
     ))
     disc_cost /= 2.
+
+    HARD_MARGIN_WEIGHT = 0.0
+    if HARD_MARGIN_WEIGHT != 0:
+        print "!!!!!!!!!!!!!!!!"
+        print "dcgan with hard margin loss, weight", HARD_MARGIN_WEIGHT
+        hard_margin_loss = tf.reduce_max(disc_fake) - tf.reduce_min(disc_real)
+        disc_cost += HARD_MARGIN_WEIGHT * hard_margin_loss
 
     disc_optimizer = tf.train.AdamOptimizer(
         learning_rate=2e-4,
@@ -276,7 +289,7 @@ def load(target_digits):
     reals_train = X_train[y_train==target_digits[0]]
     fakes_train = X_train[y_train==target_digits[1]]
 
-    trunc = 50 # circa 5500 is the untruncated size.
+    trunc = 500 # circa 5500 is the untruncated size.
     reals_train = reals_train[:trunc]
     fakes_train = fakes_train[:trunc]
 
