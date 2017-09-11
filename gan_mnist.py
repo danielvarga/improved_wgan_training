@@ -27,7 +27,7 @@ BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
 LAMBDA = 10 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
-ITERS = 20000 # How many generator iterations to train for 
+ITERS = 3000 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
@@ -43,7 +43,7 @@ if not os.path.exists(DIRNAME):
     os.mkdir(DIRNAME)
 
 # this placeholder controls whether we add some noise to the weights of convolutional filters in the discriminator
-WEIGHT_NOISE_SIGMA = tf.placeholder(tf.float32, shape=[])
+WEIGHT_NOISE_SIGMA = tf.placeholder_with_default(tf.constant(0.0), shape=[])
 
 # Set lambda to zero at this iteration; set for -1 to disable
 LAMBDA_TO_ZERO_ITER = -1 
@@ -200,11 +200,6 @@ elif MODE == 'wgan-gp':
 
     slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
 
-    # create an op that reduces "slopes"
-    slope_optimizer = tf.train.GradientDescentOptimizer(learning_rate=5e-5)
-    slope_gvs = slope_optimizer.compute_gradients(tf.reduce_mean(slopes), var_list=disc_params)
-    slope_train_op = slope_optimizer.apply_gradients(slope_gvs)
-    
     if GRADIENT_SHRINKING:
         print "gradient shrinking"
         if SHRINKING_REDUCTOR == "mean":
@@ -259,6 +254,16 @@ elif MODE == 'wgan-gp':
     )
     disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
     disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
+
+    # create an op that reduces "slopes"
+    slope_optimizer = tf.train.GradientDescentOptimizer(learning_rate=5e-5)
+    slope_gvs = slope_optimizer.compute_gradients(tf.reduce_mean(slopes), var_list=disc_params)
+    slope_train_op = slope_optimizer.apply_gradients(slope_gvs)
+
+    disc_optimizer2 = tf.train.GradientDescentOptimizer(learning_rate=1e-5)
+    disc_gvs2 = disc_optimizer2.compute_gradients(disc_cost, var_list=disc_params)
+    disc_train_op2 = disc_optimizer2.apply_gradients(disc_gvs2)
+
 
     clip_disc_weights = None
 
@@ -317,7 +322,6 @@ def inf_train_gen():
 with tf.Session() as session:
 
     session.run(tf.global_variables_initializer())
-    #session.run(tf.initialize_all_variables())
 
     if MODE=='wgan-gp':
         if GRADIENT_SHRINKING:
@@ -415,8 +419,7 @@ with tf.Session() as session:
         if iteration > 0:
             _ = session.run(gen_train_op,
                             feed_dict={
-                                real_data:_data,
-                                WEIGHT_NOISE_SIGMA:0.0}
+                                real_data:_data}
             )
 
         if MODE == 'dcgan':
@@ -427,7 +430,7 @@ with tf.Session() as session:
             _data = gen.next()
             _weight_loss, _disc_cost, _ = session.run(
                 [weight_loss, disc_cost, disc_train_op],
-                feed_dict={real_data: _data, lambda_tf: BLAMBDA, WEIGHT_NOISE_SIGMA:0.0}
+                feed_dict={real_data: _data, lambda_tf: BLAMBDA}
             )
 
             if clip_disc_weights is not None:
@@ -441,11 +444,14 @@ with tf.Session() as session:
 
         # check what happens if we make a single sgd step towards reducing slopes
         if iteration % 500 == 0:
-            slopes_before = session.run(slopes_at_random, feed_dict={random_images_ph:random_images, WEIGHT_NOISE_SIGMA:0.0})
-            session.run(slope_train_op,
-                        feed_dict={real_data:_data, lambda_tf:BLAMBDA, WEIGHT_NOISE_SIGMA:0.0}
+            slopes_before = session.run(slopes_at_random, feed_dict={random_images_ph:random_images})
+            # session.run(slope_train_op,
+            #             feed_dict={real_data:_data, lambda_tf:BLAMBDA}
+            #             )
+            session.run(disc_train_op2,
+                        feed_dict={real_data:_data, lambda_tf:BLAMBDA}
                         )
-            slopes_after = session.run(slopes_at_random, feed_dict={random_images_ph:random_images,  WEIGHT_NOISE_SIGMA:0.0})
+            slopes_after = session.run(slopes_at_random, feed_dict={random_images_ph:random_images})
             slope_deltas = slopes_after - slopes_before
             print "Avg slope increase: ", np.mean(slope_deltas)
             print "Avg slope change squared: ", np.mean(np.square(slope_deltas))
@@ -457,7 +463,7 @@ with tf.Session() as session:
             for images,_ in dev_gen():
                 _dev_disc_cost = session.run(
                     disc_cost, 
-                    feed_dict={real_data: images, lambda_tf: BLAMBDA, WEIGHT_NOISE_SIGMA:0.0}
+                    feed_dict={real_data: images, lambda_tf: BLAMBDA}
                 )
                 dev_disc_costs.append(_dev_disc_cost)
             lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
@@ -468,8 +474,7 @@ with tf.Session() as session:
             _slopes_for_alphas = session.run([slopes_for_alphas],
                                             feed_dict={alphas:alpha_grid,
                                                        real_data_ph:heldout_minibatch,
-                                                       lambda_tf: BLAMBDA,
-                                                       WEIGHT_NOISE_SIGMA:0.0
+                                                       lambda_tf: BLAMBDA
                                             }
             )
             _slopes_for_alphas = _slopes_for_alphas[0]
@@ -504,8 +509,7 @@ with tf.Session() as session:
                 feed_dict={ real_data: heldout_minibatch,
                             real_data_ph: heldout_minibatch,
                             alphas: alpha_grid,
-                            lambda_tf: BLAMBDA,
-                            WEIGHT_NOISE_SIGMA:0.0
+                            lambda_tf: BLAMBDA
                             })
             summary_writer.add_summary(summary[0], iteration)
 
@@ -514,3 +518,24 @@ with tf.Session() as session:
             lib.plot.flush()
 
         lib.plot.tick()
+    
+    import util
+    fake_images = session.run(fixed_noise_samples)
+    for real_images, _ in dev_gen():
+        break
+
+    fake_images, fake_slopes, fake_output = util.find_greatest_slopes(Discriminator, fake_images, 0, 1e-3, session)
+    real_images, real_slopes, real_output = util.find_greatest_slopes(Discriminator, real_images, 0, 1e-3, session)
+    for iter in range(100):
+        print "real iter {}, avg slope {}, max slope: {}, avg output {}".format(iter, np.mean(real_slopes), np.max(real_slopes), np.mean(real_output))
+        print "fake iter {}, avg slope {}, max slope: {}, avg output {}".format(iter, np.mean(fake_slopes), np.max(fake_slopes), np.mean(fake_output))
+        lib.save_images.save_images(
+            real_images.reshape((-1, 28, 28)), 
+            '{}/slope_climbers_real_{}.png'.format(DIRNAME, iter)
+        )
+        lib.save_images.save_images(
+            fake_images.reshape((-1, 28, 28)), 
+            '{}/slope_climbers_fake_{}.png'.format(DIRNAME, iter)
+        )
+        fake_images, fake_slopes, fake_output = util.find_greatest_slopes(Discriminator, fake_images, 100, 1e-3, session)
+        real_images, real_slopes, real_output = util.find_greatest_slopes(Discriminator, real_images, 100, 1e-3, session)
