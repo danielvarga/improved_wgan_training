@@ -43,7 +43,7 @@ if not os.path.exists(DIRNAME):
     os.mkdir(DIRNAME)
 
 # this placeholder controls whether we add some noise to the weights of convolutional filters in the discriminator
-WEIGHT_NOISE_SIGMA = tf.placeholder(tf.float32, shape=[])
+WEIGHT_NOISE_SIGMA = tf.placeholder_with_default(tf.constant(0.0), shape=[])
 
 # Set lambda to zero at this iteration; set for -1 to disable
 LAMBDA_TO_ZERO_ITER = -1 
