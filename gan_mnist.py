@@ -21,19 +21,22 @@ import tflib.plot
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
+import util
+
 MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
-LAMBDA = 10 # Gradient penalty lambda hyperparameter
+LAMBDA = 0 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
-ITERS = 20000 # How many generator iterations to train for 
+ITERS = 2000 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
-DO_BATCHNORM = False
+DO_BATCHNORM = True if (MODE=='wgan') else False
 ACTIVATION_PENALTY = 0.0
 USE_DENSE_DISCRIMINIATOR = False
-GRADIENT_SHRINKING = False
-SHRINKING_REDUCTOR = "mean" # "none", "max", "mean", "softmax"
+GRADIENT_SHRINKING = True
+SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "softmax"
+OPTIMIZE_SLOPE=False
 lower_alpha, upper_alpha = 0.0, 1.0
 
 if DO_BATCHNORM:
@@ -81,20 +84,20 @@ def Generator(n_samples, noise=None):
 
     output = lib.ops.linear.Linear('Generator.Input', 128, 4*4*4*DIM, noise)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Generator.BN1', [0], output)
+        output = lib.ops.batchnorm.Batchnorm('Generator.BN1', [0], output, fused=False)
     output = tf.nn.relu(output)
     output = tf.reshape(output, [-1, 4*DIM, 4, 4])
 
     output = lib.ops.deconv2d.Deconv2D('Generator.2', 4*DIM, 2*DIM, 5, output)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Generator.BN2', [0,2,3], output)
+        output = lib.ops.batchnorm.Batchnorm('Generator.BN2', [0,2,3], output, fused=False)
     output = tf.nn.relu(output)
 
     output = output[:,:,:7,:7]
 
     output = lib.ops.deconv2d.Deconv2D('Generator.3', 2*DIM, DIM, 5, output)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Generator.BN3', [0,2,3], output)
+        output = lib.ops.batchnorm.Batchnorm('Generator.BN3', [0,2,3], output, fused=False)
     output = tf.nn.relu(output)
 
     output = lib.ops.deconv2d.Deconv2D('Generator.5', DIM, 1, 5, output)
@@ -110,12 +113,12 @@ def Discriminator(inputs):
 
     output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN2', [0,2,3], output)
+        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN2', [0,2,3], output, fused=False)
     output = LeakyReLU(output)
 
     output = lib.ops.conv2d.Conv2D('Discriminator.3', 2*DIM, 4*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN3', [0,2,3], output)
+        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN3', [0,2,3], output, fused=False)
     output = LeakyReLU(output)
 
     output = tf.reshape(output, [-1, 4*4*4*DIM])
@@ -367,7 +370,7 @@ with tf.Session() as session:
     grad_by_x = tf.gradients(Discriminator(x), [x])[0]
     slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[2]))
 
-    x2 = tf.random_uniform(x.shape, minval=-1, maxval=1)
+    x2 = tf.random_uniform(x.shape, minval=0, maxval=1)
     grad_by_x2 = tf.gradients(Discriminator(x2), [x2])[0]
     slopes_for_x2 = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x2), reduction_indices=[2]))
     tf.summary.histogram("slopes_at_random", slopes_for_x2)
@@ -490,3 +493,24 @@ with tf.Session() as session:
             lib.plot.flush()
 
         lib.plot.tick()
+
+    if OPTIMIZE_SLOPE:
+        fake_images = session.run(fixed_noise_samples)
+        for real_images, _ in dev_gen():
+            break
+
+        fake_images, fake_slopes, fake_output = util.find_greatest_slopes(Discriminator, fake_images, 0, 1e-3, session)
+        real_images, real_slopes, real_output = util.find_greatest_slopes(Discriminator, real_images, 0, 1e-3, session)
+        for iter in range(100):
+            print "real iter {}, avg slope {}, max slope: {}, avg output {}".format(iter, np.mean(real_slopes), np.max(real_slopes), np.mean(real_output))
+            print "fake iter {}, avg slope {}, max slope: {}, avg output {}".format(iter, np.mean(fake_slopes), np.max(fake_slopes), np.mean(fake_output))
+            lib.save_images.save_images(
+                real_images.reshape((-1, 28, 28)), 
+                '{}/slope_climbers_real_{}.png'.format(DIRNAME, iter)
+            )
+            lib.save_images.save_images(
+                fake_images.reshape((-1, 28, 28)), 
+                '{}/slope_climbers_fake_{}.png'.format(DIRNAME, iter)
+            )
+            fake_images, fake_slopes, fake_output = util.find_greatest_slopes(Discriminator, fake_images, 100, 1e-3, session)
+            real_images, real_slopes, real_output = util.find_greatest_slopes(Discriminator, real_images, 100, 1e-3, session)
