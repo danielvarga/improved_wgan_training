@@ -21,13 +21,13 @@ import tflib.plot
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
-MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
+MODE = 'wgan' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
 LAMBDA = 10 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
-ITERS = 3000 # How many generator iterations to train for 
+ITERS = 0 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
@@ -81,20 +81,20 @@ def Generator(n_samples, noise=None):
 
     output = lib.ops.linear.Linear('Generator.Input', 128, 4*4*4*DIM, noise)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Generator.BN1', [0], output)
+        output = lib.ops.batchnorm.Batchnorm('Generator.BN1', [0], output, fused=False)
     output = tf.nn.relu(output)
     output = tf.reshape(output, [-1, 4*DIM, 4, 4])
 
     output = lib.ops.deconv2d.Deconv2D('Generator.2', 4*DIM, 2*DIM, 5, output)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Generator.BN2', [0,2,3], output)
+        output = lib.ops.batchnorm.Batchnorm('Generator.BN2', [0,2,3], output, fused=False)
     output = tf.nn.relu(output)
 
     output = output[:,:,:7,:7]
 
     output = lib.ops.deconv2d.Deconv2D('Generator.3', 2*DIM, DIM, 5, output)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Generator.BN3', [0,2,3], output)
+        output = lib.ops.batchnorm.Batchnorm('Generator.BN3', [0,2,3], output, fused=False)
     output = tf.nn.relu(output)
 
     output = lib.ops.deconv2d.Deconv2D('Generator.5', DIM, 1, 5, output)
@@ -110,12 +110,12 @@ def Discriminator(inputs):
 
     output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN2', [0,2,3], output)
+        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN2', [0,2,3], output, fused=False)
     output = LeakyReLU(output)
 
     output = lib.ops.conv2d.Conv2D('Discriminator.3', 2*DIM, 4*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
     if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN3', [0,2,3], output)
+        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN3', [0,2,3], output, fused=False)
     output = LeakyReLU(output)
 
     output = tf.reshape(output, [-1, 4*4*4*DIM])
@@ -340,14 +340,12 @@ with tf.Session() as session:
     for param_name, param in lib._params.iteritems():
         print param_name, param
         tf.summary.histogram(param_name+"/weights", param)
-
     for grad, var in gen_gvs:
         if grad is not None:
             tf.summary.histogram(var.name + "/gradients", grad)
     for grad, var in disc_gvs:
         if grad is not None:
             tf.summary.histogram(var.name + "/gradients", grad)
-
     """
     config = projector.ProjectorConfig()
     embedding = config.embeddings.add()
@@ -369,7 +367,7 @@ with tf.Session() as session:
 
     # compute slopes at random_images_ph
     random_image_count = 10000
-    random_images = np.random.uniform(-1, 1, (random_image_count, OUTPUT_DIM))
+    random_images = np.random.uniform(0, 1, (random_image_count, OUTPUT_DIM))
     random_images_ph = tf.placeholder(tf.float32, shape=(random_image_count, OUTPUT_DIM))
     grad_at_random = tf.gradients(Discriminator(random_images_ph), [random_images_ph])[0]
     slopes_at_random = tf.sqrt(tf.reduce_sum(tf.square(grad_at_random), reduction_indices=[1]))
@@ -442,20 +440,20 @@ with tf.Session() as session:
 
         alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
 
-        # check what happens if we make a single sgd step towards reducing slopes
-        if iteration % 500 == 0:
-            slopes_before = session.run(slopes_at_random, feed_dict={random_images_ph:random_images})
-            # session.run(slope_train_op,
-            #             feed_dict={real_data:_data, lambda_tf:BLAMBDA}
-            #             )
-            session.run(disc_train_op2,
-                        feed_dict={real_data:_data, lambda_tf:BLAMBDA}
-                        )
-            slopes_after = session.run(slopes_at_random, feed_dict={random_images_ph:random_images})
-            slope_deltas = slopes_after - slopes_before
-            print "Avg slope increase: ", np.mean(slope_deltas)
-            print "Avg slope change squared: ", np.mean(np.square(slope_deltas))
-            print "Pct of slope increases: ", 100.0 * np.sum(slope_deltas > 0) / np.size(slope_deltas)
+        # # check what happens if we make a single sgd step towards reducing slopes
+        # if iteration % 500 == 0:
+        #     slopes_before = session.run(slopes_at_random, feed_dict={random_images_ph:random_images})
+        #     # session.run(slope_train_op,
+        #     #             feed_dict={real_data:_data, lambda_tf:BLAMBDA}
+        #     #             )
+        #     session.run(disc_train_op2,
+        #                 feed_dict={real_data:_data, lambda_tf:BLAMBDA}
+        #                 )
+        #     slopes_after = session.run(slopes_at_random, feed_dict={random_images_ph:random_images})
+        #     slope_deltas = slopes_after - slopes_before
+        #     print "Avg slope increase: ", np.mean(slope_deltas)
+        #     print "Avg slope change squared: ", np.mean(np.square(slope_deltas))
+        #     print "Pct of slope increases: ", 100.0 * np.sum(slope_deltas > 0) / np.size(slope_deltas)
             
         # Calculate dev loss and generate samples every 100 iters
         if iteration < 5 or iteration % 100 == 0:
