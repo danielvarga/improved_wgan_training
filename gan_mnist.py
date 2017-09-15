@@ -27,14 +27,14 @@ MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
-LAMBDA = 0 # Gradient penalty lambda hyperparameter
-WEIGHT_DECAY_FACTOR = 0
-ITERS = 2000 # How many generator iterations to train for 
+LAMBDA = 10 # Gradient penalty lambda hyperparameter
+WEIGHT_DECAY_FACTOR = 0.0
+ITERS = 20000 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = True if (MODE=='wgan') else False
 ACTIVATION_PENALTY = 0.0
-USE_DENSE_DISCRIMINIATOR = False
-GRADIENT_SHRINKING = True
+USE_DENSE_DISCRIMINATOR = False
+GRADIENT_SHRINKING = False
 SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "softmax"
 OPTIMIZE_SLOPE=False
 lower_alpha, upper_alpha = 0.0, 1.0
@@ -54,6 +54,17 @@ if len(sys.argv) == 2:
     LAMBDA_TO_ZERO_ITER = int(sys.argv[1])
 
 lib.print_model_settings(locals().copy())
+
+def PReLU(_x, name):
+    with tf.variable_scope("prelu_alphas") as scope:
+        try:
+            alphas = tf.get_variable(name, _x.get_shape()[-1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+        except ValueError:
+            scope.reuse_variables()
+            alphas = tf.get_variable(name, _x.get_shape()[-1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+    pos = tf.nn.relu(_x)
+    neg = alphas * (_x - abs(_x)) * 0.5
+    return pos + neg
 
 def LeakyReLU(x, alpha=0.2):
     return tf.maximum(alpha*x, x)
@@ -141,7 +152,7 @@ lambda_tf = tf.placeholder(tf.float32, shape=[])
 real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
 fake_data = Generator(BATCH_SIZE)
 
-if USE_DENSE_DISCRIMINIATOR:
+if USE_DENSE_DISCRIMINATOR:
     Discriminator = Dense_Discriminator
 
 disc_real = Discriminator(real_data)
@@ -202,6 +213,7 @@ elif MODE == 'wgan-gp':
     # gradients = tf.gradients(Discriminator(fake_images), [noise])[0]
 
     slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+    final_slopes = slopes
     
     if GRADIENT_SHRINKING:
         print "gradient shrinking"
@@ -217,7 +229,8 @@ elif MODE == 'wgan-gp':
         disc_real /= grad_norm
         disc_fake /= grad_norm
         disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
-        gen_cost = -tf.reduce_mean(disc_fake)            
+        gen_cost = -tf.reduce_mean(disc_fake)           
+        final_slopes /= grad_norm
         
     if ACTIVATION_PENALTY > 0:
         activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY))
@@ -227,6 +240,7 @@ elif MODE == 'wgan-gp':
         gradient_penalty = tf.reduce_mean((slopes-1.)**2)
         disc_cost += LAMBDA*gradient_penalty
         
+    tf.summary.histogram("final_slopes", final_slopes)
 
     # weight regularization
     if WEIGHT_DECAY_FACTOR > 0:
@@ -319,7 +333,7 @@ with tf.Session() as session:
 
     if MODE=='wgan-gp':
         if GRADIENT_SHRINKING:
-            session_name = "%s-%.2f-%.2f-lambda%.2f-%s" % (MODE, lower_alpha, upper_alpha, LAMBDA, SHRINKING_REDUCTOR)
+            session_name = "wgan-gs-%.2f-%.2f-lambda%.2f-%s" % (lower_alpha, upper_alpha, LAMBDA, SHRINKING_REDUCTOR)
         else:
             session_name = "%s-%.2f-%.2f-lambda%.2f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
     elif MODE=='wgan':
@@ -512,5 +526,5 @@ with tf.Session() as session:
                 fake_images.reshape((-1, 28, 28)), 
                 '{}/slope_climbers_fake_{}.png'.format(DIRNAME, iter)
             )
-            fake_images, fake_slopes, fake_output = util.find_greatest_slopes(Discriminator, fake_images, 100, 1e-3, session)
-            real_images, real_slopes, real_output = util.find_greatest_slopes(Discriminator, real_images, 100, 1e-3, session)
+            fake_images, fake_slopes, fake_output = util.find_greatest_slopes(Discriminator, fake_images, 10, 1e-3, session)
+            real_images, real_slopes, real_output = util.find_greatest_slopes(Discriminator, real_images, 10, 1e-3, session)
