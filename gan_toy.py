@@ -74,13 +74,23 @@ if MODE == 'wgan-gp':
         minval=0.,
         maxval=1.
     )
-    interpolates = alpha*real_data + ((1-alpha)*fake_data)
+    interpolates = alpha*real_data[:BATCH_SIZE] + ((1-alpha)*fake_data)
     disc_interpolates = Discriminator(interpolates)
     gradients = tf.gradients(disc_interpolates, [interpolates])[0]
     slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-    gradient_penalty = tf.reduce_mean((slopes-1)**2)
- 
-    disc_cost += LAMBDA*gradient_penalty
+
+    # original WGAN-GP
+    # gradient_penalty = tf.reduce_mean((slopes-1)**2)
+
+    # FLAT-GP
+    # gradient_penalty = tf.reduce_mean((tf.maximum(1., tf.abs(slopes)) - 1.0)**2)
+
+    print "gradient shrinking - max"
+    disc_real /= tf.reduce_max(slopes)
+    disc_fake /= tf.reduce_max(slopes)
+    disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
+    gen_cost = -tf.reduce_mean(disc_fake)
+    # -----> disc_cost += LAMBDA*gradient_penalty
 
 disc_params = lib.params_with_name('Discriminator')
 gen_params = lib.params_with_name('Generator')
@@ -139,6 +149,68 @@ print "Discriminator params:"
 for var in lib.params_with_name('Discriminator'):
     print "\t{}\t{}".format(var.name, var.get_shape())
 
+
+def gaussian_centers():
+    scale = 2.
+    centers = [
+            (1,0),
+            (-1,0),
+            (0,1),
+            (0,-1),
+            (1./np.sqrt(2), 1./np.sqrt(2)),
+            (1./np.sqrt(2), -1./np.sqrt(2)),
+            (-1./np.sqrt(2), 1./np.sqrt(2)),
+            (-1./np.sqrt(2), -1./np.sqrt(2))
+        ]
+    centers = [(scale*x,scale*y) for x,y in centers]
+    return np.array(centers)
+
+
+def evaluate_mixture():
+    batch_count = 10
+    samples = []
+    for i in range(batch_count):
+        mb_samples, = session.run(
+            [fake_data]
+        )
+        samples += mb_samples.tolist()
+
+    samples = np.array(samples)
+
+    assert DATASET == '8gaussians'
+
+    centers = gaussian_centers()
+
+    deltas = samples[:, np.newaxis, :] - centers[np.newaxis, :, :]
+
+    d = np.linalg.norm(deltas, axis=2)
+    clusters = d.argmin(axis=1)
+    distances = d.min(axis=1)
+    center_for_each = centers[clusters, :]
+    offsets = samples - center_for_each
+
+    plt.clf()
+    plt.scatter(offsets[:, 0],    offsets[:, 1],    c='green', marker='+')
+    plt.savefig('offsets'+str(frame_index[0])+'.jpg')
+
+
+    unique, counts = np.unique(clusters, return_counts=True)
+    # assert unique.tolist() == range(8)
+    probs = counts.astype(np.float32) / len(clusters)
+    print "entropy", -np.sum(probs * np.log2(probs)),
+
+    print np.histogram(offsets[:, 0])
+
+    import scipy.stats
+    print "center", np.mean(offsets, axis=0),
+    offsets -= np.mean(offsets, axis=0)
+    print "std", np.std(offsets, axis=0)
+    offsets /= np.std(offsets, axis=0)
+
+    print "Kolmogorov-Smirnov of normalized coord0", tuple(scipy.stats.kstest(offsets[:, 0], 'norm'))
+    print "Kolmogorov-Smirnov of normalized coord1", tuple(scipy.stats.kstest(offsets[:, 1], 'norm'))
+
+
 frame_index = [0]
 def generate_image(true_dist):
     """
@@ -153,7 +225,7 @@ def generate_image(true_dist):
     points[:,:,1] = np.linspace(-RANGE, RANGE, N_POINTS)[None,:]
     points = points.reshape((-1,2))
     samples, disc_map = session.run(
-        [fake_data, disc_real], 
+        [fake_data, disc_real],
         feed_dict={real_data:points}
     )
     disc_map = session.run(disc_real, feed_dict={real_data:points})
@@ -167,6 +239,9 @@ def generate_image(true_dist):
     plt.scatter(samples[:, 0],    samples[:, 1],    c='green', marker='+')
 
     plt.savefig('frame'+str(frame_index[0])+'.jpg')
+
+    evaluate_mixture()
+
     frame_index[0] += 1
 
 # Dataset iterator
@@ -200,29 +275,18 @@ def inf_train_gen():
             yield data
 
     elif DATASET == '8gaussians':
-    
-        scale = 2.
-        centers = [
-            (1,0),
-            (-1,0),
-            (0,1),
-            (0,-1),
-            (1./np.sqrt(2), 1./np.sqrt(2)),
-            (1./np.sqrt(2), -1./np.sqrt(2)),
-            (-1./np.sqrt(2), 1./np.sqrt(2)),
-            (-1./np.sqrt(2), -1./np.sqrt(2))
-        ]
-        centers = [(scale*x,scale*y) for x,y in centers]
+        centers = gaussian_centers()
+
         while True:
             dataset = []
             for i in xrange(BATCH_SIZE):
-                point = np.random.randn(2)*.02
+                point = np.random.randn(2) * 0.02 # !!!!
                 center = random.choice(centers)
                 point[0] += center[0]
                 point[1] += center[1]
                 dataset.append(point)
             dataset = np.array(dataset, dtype='float32')
-            dataset /= 1.414 # stdev
+            # dataset /= 1.414 # stdev
             yield dataset
 
 # Train loop!
@@ -232,7 +296,8 @@ with tf.Session() as session:
     for iteration in xrange(ITERS):
         # Train generator
         if iteration > 0:
-            _ = session.run(gen_train_op)
+            _data = gen.next()
+            _ = session.run(gen_train_op, feed_dict={real_data: _data})
         # Train critic
         for i in xrange(CRITIC_ITERS):
             _data = gen.next()
