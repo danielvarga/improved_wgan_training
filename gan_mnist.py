@@ -195,7 +195,7 @@ if MODE == 'wgan':
         )
     clip_disc_weights = tf.group(*clip_ops)
 
-elif MODE in ('wgan-gp', 'wgan-gp'):
+elif MODE in ('wgan-gp', 'wgan-gs'):
     alpha_strategy = "uniform"
 
     gen_cost, disc_cost, initial_slopes, final_slopes = losses.calculate_losses(
@@ -252,6 +252,8 @@ elif MODE == 'dcgan':
     disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
 
     clip_disc_weights = None
+else:
+    assert False, "unknown MODE"
 
 # For saving samples
 fixed_noise = tf.constant(np.random.normal(size=(128, 128)).astype('float32'))

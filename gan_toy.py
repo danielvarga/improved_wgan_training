@@ -15,11 +15,12 @@ import tflib as lib
 import tflib.ops.linear
 import tflib.plot
 
+import losses
+
+
 MODE = 'wgan-gp' # wgan or wgan-gp
 DATASET = '8gaussians' # 8gaussians, 25gaussians, swissroll
 DIM = 512 # Model dimensionality
-FIXED_GENERATOR = False # whether to hold the generator fixed at real data plus
-                        # Gaussian noise, as in the plots in the paper
 LAMBDA = .1 # Smaller lambda makes things faster for toy tasks, but isn't
             # necessary if you increase CRITIC_ITERS enough
 CRITIC_ITERS = 5 # How many critic iterations per generator iteration
@@ -39,16 +40,15 @@ def ReLULayer(name, n_in, n_out, inputs):
     output = tf.nn.relu(output)
     return output
 
-def Generator(n_samples, real_data):
-    if FIXED_GENERATOR:
-        return real_data + (1.*tf.random_normal(tf.shape(real_data)))
-    else:
-        noise = tf.random_normal([n_samples, 2])
-        output = ReLULayer('Generator.1', 2, DIM, noise)
-        output = ReLULayer('Generator.2', DIM, DIM, output)
-        output = ReLULayer('Generator.3', DIM, DIM, output)
-        output = lib.ops.linear.Linear('Generator.4', DIM, 2, output)
-        return output
+def Generator(n_samples):
+    # if FIXED_GENERATOR:
+    #    return real_data + (1.*tf.random_normal(tf.shape(real_data)))
+    noise = tf.random_normal([n_samples, 2])
+    output = ReLULayer('Generator.1', 2, DIM, noise)
+    output = ReLULayer('Generator.2', DIM, DIM, output)
+    output = ReLULayer('Generator.3', DIM, DIM, output)
+    output = lib.ops.linear.Linear('Generator.4', DIM, 2, output)
+    return output
 
 def Discriminator(inputs):
     output = ReLULayer('Discriminator.1', 2, DIM, inputs)
@@ -58,7 +58,9 @@ def Discriminator(inputs):
     return tf.reshape(output, [-1])
 
 real_data = tf.placeholder(tf.float32, shape=[None, 2])
-fake_data = Generator(BATCH_SIZE, real_data)
+fake_data = Generator(BATCH_SIZE)
+
+
 
 disc_real = Discriminator(real_data)
 disc_fake = Discriminator(fake_data)
@@ -67,30 +69,13 @@ disc_fake = Discriminator(fake_data)
 disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 gen_cost = -tf.reduce_mean(disc_fake)
 
-# WGAN gradient penalty
-if MODE == 'wgan-gp':
-    alpha = tf.random_uniform(
-        shape=[BATCH_SIZE,1], 
-        minval=0.,
-        maxval=1.
-    )
-    interpolates = alpha*real_data[:BATCH_SIZE] + ((1-alpha)*fake_data)
-    disc_interpolates = Discriminator(interpolates)
-    gradients = tf.gradients(disc_interpolates, [interpolates])[0]
-    slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+if MODE in ('wgan-gp', 'wgan-gs'):
+    alpha_strategy = "uniform"
 
-    # original WGAN-GP
-    # gradient_penalty = tf.reduce_mean((slopes-1)**2)
-
-    # FLAT-GP
-    # gradient_penalty = tf.reduce_mean((tf.maximum(1., tf.abs(slopes)) - 1.0)**2)
-
-    print "gradient shrinking - max"
-    disc_real /= tf.reduce_max(slopes)
-    disc_fake /= tf.reduce_max(slopes)
-    disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
-    gen_cost = -tf.reduce_mean(disc_fake)
-    # -----> disc_cost += LAMBDA*gradient_penalty
+    gen_cost, disc_cost, initial_slopes, final_slopes = losses.calculate_losses(
+            BATCH_SIZE, real_data,
+            Generator, Discriminator,
+            MODE, alpha_strategy, LAMBDA)
 
 disc_params = lib.params_with_name('Discriminator')
 gen_params = lib.params_with_name('Generator')
