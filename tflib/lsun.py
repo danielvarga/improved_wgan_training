@@ -20,9 +20,11 @@ def make_generator(all_images, n, batch_size):
 def load(batch_size, data_file):
 
     dataset = np.load(data_file)
+    n = len(dataset)
+    test_size = n // 10
     return (
-        make_generator(dataset[:450000,:,:], 450000, batch_size),
-        make_generator(dataset[450000:,:,:], 50000, batch_size)
+        make_generator(dataset[:-test_size,:,:], n - test_size, batch_size),
+        make_generator(dataset[-test_size:,:,:], test_size, batch_size)
     )
 
 if __name__ == '__main__':

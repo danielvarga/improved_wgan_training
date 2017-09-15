@@ -20,20 +20,25 @@ import tflib.plot
 
 import tflib.lsun as lsun
 
+import gan_logging
+import losses
+
+
 # Download 64x64 ImageNet at http://image-net.org/small/download.php and
 # fill in the path to the extracted files here!
 DATA_DIR = ''
 #if len(DATA_DIR) == 0:
 #    raise Exception('Please specify path to data directory in gan_64x64.py!')
 
-MODE = 'wgan-gp' # dcgan, wgan, wgan-gp, lsgan
+MODE = 'wgan-gs' # dcgan, wgan, wgan-gp, lsgan, wgan-gs
 DIM = 64 # Model dimensionality
 CRITIC_ITERS = 5 # How many iterations to train the critic for
 N_GPUS = 1 # Number of GPUs
 BATCH_SIZE = 64 # Batch size. Must be a multiple of N_GPUS
 ITERS = 200000 # How many iterations to train for
-LAMBDA = 10 # Gradient penalty lambda hyperparameter
+LAMBDA = 0 # Gradient penalty lambda hyperparameter
 OUTPUT_DIM = 64*64*3 # Number of pixels in each iamge
+FUSED = False
 
 lib.print_model_settings(locals().copy())
 
@@ -89,7 +94,7 @@ def Normalize(name, axes, inputs):
             raise Exception('Layernorm over non-standard axes is unsupported')
         return lib.ops.layernorm.Layernorm(name,[1,2,3],inputs)
     else:
-        return lib.ops.batchnorm.Batchnorm(name,axes,inputs,fused=True)
+        return lib.ops.batchnorm.Batchnorm(name,axes,inputs,fused=FUSED)
 
 def pixcnn_gated_nonlinearity(a, b):
     return tf.sigmoid(a) * tf.tanh(b)
@@ -461,9 +466,20 @@ def DCGANDiscriminator(inputs, dim=DIM, bn=True, nonlinearity=LeakyReLU):
 
     return tf.reshape(output, [-1])
 
+
+def session_name():
+    return MODE + "-temporary_session_name"
+
+
 Generator, Discriminator = GeneratorAndDiscriminator()
 
+
 with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
+
+    LOG_DIR = "logs/%s" % session_name()
+    summary_writer = tf.summary.FileWriter(LOG_DIR, graph=tf.get_default_graph())
+
+    gan_logging.log_weights_grads(None, None, lib._params)
 
     all_real_data_conv = tf.placeholder(tf.int32, shape=[BATCH_SIZE, 3, 64, 64])
     if tf.__version__.startswith('1.'):
@@ -474,51 +490,21 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
 
     for device_index, (device, real_data_conv) in enumerate(zip(DEVICES, split_real_data_conv)):
         with tf.device(device):
+            sub_batch_size = BATCH_SIZE/len(DEVICES)
 
-            real_data = tf.reshape(2*((tf.cast(real_data_conv, tf.float32)/255.)-.5), [BATCH_SIZE/len(DEVICES), OUTPUT_DIM])
-            fake_data = Generator(BATCH_SIZE/len(DEVICES))
+            real_data = tf.reshape(2*((tf.cast(real_data_conv, tf.float32)/255.)-.5), [sub_batch_size, OUTPUT_DIM])
+            fake_data = Generator(sub_batch_size)
 
             disc_real = Discriminator(real_data)
             disc_fake = Discriminator(fake_data)
 
-            if MODE == 'wgan':
-                gen_cost = -tf.reduce_mean(disc_fake)
-                disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
+            if MODE in ('wgan-gp', 'wgan-gs'):
+                alpha_strategy = "uniform"
 
-            elif MODE == 'wgan-gp':
-                gen_cost = -tf.reduce_mean(disc_fake)
-                disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
-
-                # Original WGAN-GP interpolation:
-                alpha = tf.random_uniform(
-                    shape=[BATCH_SIZE/len(DEVICES),1], 
-                    minval=0.,
-                    maxval=1.
-                )
-
-                # Bernoulli (0V1):
-                # alpha = tf.where(alpha < 0.5, tf.ones([BATCH_SIZE/len(DEVICES),1]), tf.zeros([BATCH_SIZE/len(DEVICES), 1]))
-
-                # Straight GP1:
-                alpha = tf.ones([BATCH_SIZE/len(DEVICES),1])
-
-                differences = fake_data - real_data
-                interpolates = real_data + (alpha*differences)
-                gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
-                slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-
-                # Original WGAN-GP penalty:
-                gradient_penalty = tf.reduce_mean((slopes-1.)**2)
-
-                # Flat
-                # TODO This could be tf.reduce_mean(tf.maximum(1., squared_slopes) - 1.0), try it.
-                # gradient_penalty = tf.reduce_mean((tf.maximum(1., tf.abs(slopes)) - 1.0)**2)
-
-                # L2
-                # it's simply tf.square(slopes), but I'm not sure whether TF optimizes away tf.square(tf.sqrt()).
-                # gradient_penalty = tf.reduce_sum(tf.square(gradients), reduction_indices=[1])
-
-                disc_cost += LAMBDA*gradient_penalty
+                gen_cost, disc_cost = losses.calculate_losses(
+                    sub_batch_size, real_data,
+                    Generator, Discriminator,
+                    MODE, alpha_strategy)
 
             elif MODE == 'dcgan':
                 try: # tf pre-1.0 (bottom) vs 1.0 (top)
@@ -559,7 +545,7 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
             clip_ops.append(tf.assign(var, tf.clip_by_value(var, clip_bounds[0], clip_bounds[1])))
         clip_disc_weights = tf.group(*clip_ops)
 
-    elif MODE == 'wgan-gp':
+    elif MODE == 'wgan-gp' or MODE == 'wgan-gs':
         gen_train_op = tf.train.AdamOptimizer(learning_rate=1e-4, beta1=0., beta2=0.9).minimize(gen_cost,
                                           var_list=lib.params_with_name('Generator'), colocate_gradients_with_ops=True)
         disc_train_op = tf.train.AdamOptimizer(learning_rate=1e-4, beta1=0., beta2=0.9).minimize(disc_cost,
@@ -598,7 +584,8 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
 
     # Dataset iterator
     #train_gen, dev_gen = lib.small_imagenet.load(BATCH_SIZE, data_dir=DATA_DIR)
-    train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/csadrian/datasets/bedroom_64_64.npy")
+    # train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/csadrian/datasets/bedroom_64_64.npy")
+    train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/daniel/experiments/mixture-layer/celeba_64_64_color.npy")
 
     def inf_train_gen():
         while True:
@@ -614,6 +601,18 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
 
     # Train loop
     session.run(tf.initialize_all_variables())
+
+    tf.summary.scalar("disc_cost", disc_cost)
+    if LAMBDA > 0:
+        tf.summary.scalar("gradient_penalty", gradient_penalty)
+
+    ALPHA_COUNT = 100
+
+    # alphas, real_data_ph, slopes_for_alphas = gan_logging.log_slopes(BATCH_SIZE, OUTPUT_DIM, ALPHA_COUNT, Generator, Discriminator, fixed_noise_samples)
+
+    merged_summary_op = tf.summary.merge_all()
+
+
     gen = inf_train_gen()
     for iteration in xrange(ITERS):
 
@@ -621,7 +620,8 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
 
         # Train generator
         if iteration > 0:
-            _ = session.run(gen_train_op)
+            _data = gen.next()
+            _ = session.run(gen_train_op, feed_dict={all_real_data_conv: _data})
 
         # Train critic
         if (MODE == 'dcgan') or (MODE == 'lsgan'):
@@ -645,7 +645,7 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
             print "avg_deviation", avg_deviation
         # image_variance()
 
-        if iteration % 200 == 199:
+        if (iteration % 200 == 199) or (iteration < 5):
             t = time.time()
             dev_disc_costs = []
             for (images,) in dev_gen():
