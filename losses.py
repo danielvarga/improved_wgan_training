@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, alpha_strategy):
+def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, alpha_strategy, LAMBDA):
             fake_data = Generator(SUB_BATCH_SIZE)
 
             disc_real = Discriminator(real_data)
@@ -34,13 +34,14 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                 differences = fake_data - real_data
                 interpolates = real_data + (alpha*differences)
                 gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
-                slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+                initial_slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+                final_slopes = initial_slopes
 
                 # Original WGAN-GP penalty:
-                gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+                gradient_penalty = tf.reduce_mean((initial_slopes-1.)**2)
 
                 # Flat
-                # TODO This could be tf.reduce_mean(tf.maximum(1., squared_slopes) - 1.0), try it.
+                # TODO This could be tf.reduce_mean(tf.maximum(1., slopes*slopes) - 1.0), try it.
                 # gradient_penalty = tf.reduce_mean((tf.maximum(1., tf.abs(slopes)) - 1.0)**2)
 
                 # L2
@@ -51,9 +52,10 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                     # aggregator = tf.reduce_max
                     aggregator = tf.reduce_mean
                     print "gradient shrinking", aggregator
-                    norm_factor = aggregator(slopes)
+                    norm_factor = aggregator(initial_slopes)
                     disc_real /= norm_factor
                     disc_fake /= norm_factor
+                    final_slopes /= norm_factor
                     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
                     gen_cost = -tf.reduce_mean(disc_fake)
                 else:
@@ -61,4 +63,4 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                         print "are you sure you want a LAMBDA=0 wgan-gp?"
                     disc_cost += LAMBDA * gradient_penalty
 
-            return gen_cost, disc_cost
+            return gen_cost, disc_cost, initial_slopes, final_slopes

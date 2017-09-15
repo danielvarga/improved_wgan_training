@@ -501,10 +501,10 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
             if MODE in ('wgan-gp', 'wgan-gs'):
                 alpha_strategy = "uniform"
 
-                gen_cost, disc_cost = losses.calculate_losses(
+                gen_cost, disc_cost, initial_slopes, final_slopes = losses.calculate_losses(
                     sub_batch_size, real_data,
                     Generator, Discriminator,
-                    MODE, alpha_strategy)
+                    MODE, alpha_strategy, LAMBDA)
 
             elif MODE == 'dcgan':
                 try: # tf pre-1.0 (bottom) vs 1.0 (top)
