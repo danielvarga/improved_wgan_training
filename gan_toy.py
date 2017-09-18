@@ -16,7 +16,8 @@ import tflib.ops.linear
 import tflib.plot
 
 MODE = 'wgan-gp' # wgan or wgan-gp
-DATASET = '8gaussians' # 8gaussians, 25gaussians, swissroll
+DATASET = 'gaussians' # gaussians, swissroll
+GAUSSIAN_COUNT = 50
 DIM = 512 # Model dimensionality
 FIXED_GENERATOR = False # whether to hold the generator fixed at real data plus
                         # Gaussian noise, as in the plots in the paper
@@ -25,6 +26,9 @@ LAMBDA = .1 # Smaller lambda makes things faster for toy tasks, but isn't
 CRITIC_ITERS = 5 # How many critic iterations per generator iteration
 BATCH_SIZE = 256 # Batch size
 ITERS = 100000 # how many generator iterations to train for
+DIRNAME="pictures"
+if not os.path.exists(DIRNAME):
+    os.mkdir(DIRNAME)
 
 lib.print_model_settings(locals().copy())
 
@@ -80,16 +84,17 @@ if MODE == 'wgan-gp':
     slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
 
     # original WGAN-GP
-    # gradient_penalty = tf.reduce_mean((slopes-1)**2)
+    gradient_penalty = tf.reduce_mean((slopes-1)**2)
+    disc_cost += LAMBDA * gradient_penalty
 
     # FLAT-GP
     # gradient_penalty = tf.reduce_mean((tf.maximum(1., tf.abs(slopes)) - 1.0)**2)
 
-    print "gradient shrinking - max"
-    disc_real /= tf.reduce_max(slopes)
-    disc_fake /= tf.reduce_max(slopes)
-    disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
-    gen_cost = -tf.reduce_mean(disc_fake)
+    # print "gradient shrinking - max"
+    # disc_real /= tf.reduce_max(slopes)
+    # disc_fake /= tf.reduce_max(slopes)
+    # disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
+    # gen_cost = -tf.reduce_mean(disc_fake)
     # -----> disc_cost += LAMBDA*gradient_penalty
 
 disc_params = lib.params_with_name('Discriminator')
@@ -149,8 +154,16 @@ print "Discriminator params:"
 for var in lib.params_with_name('Discriminator'):
     print "\t{}\t{}".format(var.name, var.get_shape())
 
+def grid_points(count):
+    scale = 2.
+    size = int(np.sqrt(count))
+    centers = []
+    for x in xrange(-size//2, size-size//2):
+        for y in xrange(-size//2, size-size//2):
+            centers.append([x,y])
+    return scale * np.array(centers)
 
-def gaussian_centers():
+def gaussian_centers_8():
     scale = 2.
     centers = [
             (1,0),
@@ -166,7 +179,7 @@ def gaussian_centers():
     return np.array(centers)
 
 
-def evaluate_mixture():
+def evaluate_mixture(iteration):
     batch_count = 10
     samples = []
     for i in range(batch_count):
@@ -177,9 +190,11 @@ def evaluate_mixture():
 
     samples = np.array(samples)
 
-    assert DATASET == '8gaussians'
-
-    centers = gaussian_centers()
+    assert DATASET == 'gaussians'
+    if GAUSSIAN_COUNT == 8:
+        centers = gaussian_centers_8()
+    else:
+        centers = grid_points(GAUSSIAN_COUNT)
 
     deltas = samples[:, np.newaxis, :] - centers[np.newaxis, :, :]
 
@@ -191,7 +206,7 @@ def evaluate_mixture():
 
     plt.clf()
     plt.scatter(offsets[:, 0],    offsets[:, 1],    c='green', marker='+')
-    plt.savefig('offsets'+str(frame_index[0])+'.jpg')
+    plt.savefig(DIRNAME+'/offsets'+str(iteration)+'.jpg')
 
 
     unique, counts = np.unique(clusters, return_counts=True)
@@ -211,8 +226,7 @@ def evaluate_mixture():
     print "Kolmogorov-Smirnov of normalized coord1", tuple(scipy.stats.kstest(offsets[:, 1], 'norm'))
 
 
-frame_index = [0]
-def generate_image(true_dist):
+def generate_image(true_dist, iteration):
     """
     Generates and saves a plot of the true distribution, the generator, and the
     critic.
@@ -238,32 +252,29 @@ def generate_image(true_dist):
     plt.scatter(true_dist[:, 0], true_dist[:, 1], c='orange',  marker='+')
     plt.scatter(samples[:, 0],    samples[:, 1],    c='green', marker='+')
 
-    plt.savefig('frame'+str(frame_index[0])+'.jpg')
-
-    evaluate_mixture()
-
-    frame_index[0] += 1
+    plt.savefig(DIRNAME+'/frame_'+str(iteration)+'.jpg')
+    evaluate_mixture(iteration)
 
 # Dataset iterator
 def inf_train_gen():
-    if DATASET == '25gaussians':
+    # if DATASET == '25gaussians':
     
-        dataset = []
-        for i in xrange(100000/25):
-            for x in xrange(-2, 3):
-                for y in xrange(-2, 3):
-                    point = np.random.randn(2)*0.05
-                    point[0] += 2*x
-                    point[1] += 2*y
-                    dataset.append(point)
-        dataset = np.array(dataset, dtype='float32')
-        np.random.shuffle(dataset)
-        dataset /= 2.828 # stdev
-        while True:
-            for i in xrange(len(dataset)/BATCH_SIZE):
-                yield dataset[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
+    #     dataset = []
+    #     for i in xrange(100000/25):
+    #         for x in xrange(-2, 3):
+    #             for y in xrange(-2, 3):
+    #                 point = np.random.randn(2)*0.05
+    #                 point[0] += 2*x
+    #                 point[1] += 2*y
+    #                 dataset.append(point)
+    #     dataset = np.array(dataset, dtype='float32')
+    #     dataset /= np.std(dataset)
+    #     while True:
+    #         np.random.shuffle(dataset)
+    #         for i in xrange(len(dataset)/BATCH_SIZE):
+    #             yield dataset[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
 
-    elif DATASET == 'swissroll':
+    if DATASET == 'swissroll':
 
         while True:
             data = sklearn.datasets.make_swiss_roll(
@@ -274,8 +285,11 @@ def inf_train_gen():
             data /= 7.5 # stdev plus a little
             yield data
 
-    elif DATASET == '8gaussians':
-        centers = gaussian_centers()
+    elif DATASET == 'gaussians':
+        if GAUSSIAN_COUNT == 8:
+            centers = gaussian_centers_8()
+        else:
+            centers = grid_points(GAUSSIAN_COUNT)
 
         while True:
             dataset = []
@@ -286,12 +300,12 @@ def inf_train_gen():
                 point[1] += center[1]
                 dataset.append(point)
             dataset = np.array(dataset, dtype='float32')
-            # dataset /= 1.414 # stdev
+            dataset /= np.std(dataset)
             yield dataset
 
 # Train loop!
 with tf.Session() as session:
-    session.run(tf.initialize_all_variables())
+    session.run(tf.global_variables_initializer())
     gen = inf_train_gen()
     for iteration in xrange(ITERS):
         # Train generator
@@ -311,5 +325,5 @@ with tf.Session() as session:
         lib.plot.plot('disc cost', _disc_cost)
         if iteration % 100 == 99:
             lib.plot.flush()
-            generate_image(_data)
+            generate_image(_data, iteration+1)
         lib.plot.tick()
