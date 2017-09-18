@@ -22,6 +22,7 @@ import tflib.plot
 from tensorflow.contrib.tensorboard.plugins import projector
 
 import util
+import losses
 
 MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
@@ -193,68 +194,14 @@ if MODE == 'wgan':
             )
         )
     clip_disc_weights = tf.group(*clip_ops)
-    weight_loss = tf.constant(0.0)
-    
-elif MODE == 'wgan-gp':    
-    gen_cost = -tf.reduce_mean(disc_fake)
-    disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
-    alpha = tf.random_uniform(
-        shape=[BATCH_SIZE,1], 
-        minval=lower_alpha,
-        maxval=upper_alpha
-    )
+elif MODE in ('wgan-gp', 'wgan-gs'):
+    alpha_strategy = "uniform"
 
-    differences = fake_data - real_data
-    interpolates = real_data + (alpha*differences)
-    gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
-    # noise = tf.random_normal([BATCH_SIZE, 128])
-    # fake_images = Generator(128, noise)
-    # gradients = tf.gradients(Discriminator(fake_images), [noise])[0]
-
-    slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-    final_slopes = slopes
-    
-    if GRADIENT_SHRINKING:
-        print "gradient shrinking"
-        if SHRINKING_REDUCTOR == "mean":
-            grad_norm = tf.reduce_mean(slopes)
-        elif SHRINKING_REDUCTOR == "max":
-            grad_norm = tf.reduce_max(slopes)
-        elif SHRINKING_REDUCTOR == "softmax":
-            grad_norm = tf.reduce_logsumexp(slopes)
-        elif SHRINKING_REDUCTOR == "none":
-            grad_norm = slopes
-
-        disc_real /= grad_norm
-        disc_fake /= grad_norm
-        disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
-        gen_cost = -tf.reduce_mean(disc_fake)           
-        final_slopes /= grad_norm
-        
-    if ACTIVATION_PENALTY > 0:
-        activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY))
-        disc_cost += activation_loss
-    
-    if LAMBDA > 0:
-        gradient_penalty = tf.reduce_mean((slopes-1.)**2)
-        disc_cost += LAMBDA*gradient_penalty
-        
-    tf.summary.histogram("final_slopes", final_slopes)
-
-    # weight regularization
-    if WEIGHT_DECAY_FACTOR > 0:
-
-        with tf.variable_scope('weights_norm') as scope:
-            weight_loss = tf.reduce_sum(
-                input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
-                    [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
-                ),
-                name='weight_loss'
-            )
-        disc_cost += weight_loss
-    else:
-        weight_loss = tf.constant(0.0)
+    gen_cost, disc_cost, initial_slopes, final_slopes = losses.calculate_losses(
+            BATCH_SIZE, real_data,
+            Generator, Discriminator,
+            MODE, alpha_strategy, LAMBDA)
 
     gen_optimizer = tf.train.AdamOptimizer(
         learning_rate=1e-4,
@@ -305,7 +252,8 @@ elif MODE == 'dcgan':
     disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
 
     clip_disc_weights = None
-    weight_loss = tf.constant(0.0)
+else:
+    assert False, "unknown MODE"
 
 # For saving samples
 fixed_noise = tf.constant(np.random.normal(size=(128, 128)).astype('float32'))
@@ -430,8 +378,8 @@ with tf.Session() as session:
             disc_iters = CRITIC_ITERS
         for i in xrange(disc_iters):
             _data = gen.next()
-            _weight_loss, _disc_cost, _ = session.run(
-                [weight_loss, disc_cost, disc_train_op],
+            _disc_cost, _ = session.run(
+                [disc_cost, disc_train_op],
                 feed_dict={real_data: _data, lambda_tf: BLAMBDA, WEIGHT_NOISE_SIGMA:0.0}
             )
 
@@ -439,7 +387,6 @@ with tf.Session() as session:
                 _ = session.run(clip_disc_weights)
 
         lib.plot.plot('train disc cost', _disc_cost)
-        lib.plot.plot('train weight loss', _weight_loss)
         lib.plot.plot('time', time.time() - start_time)
 
         alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
