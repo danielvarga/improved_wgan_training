@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, alpha_strategy, LAMBDA):
+def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, alpha_strategy, LAMBDA, aggregator = tf.reduce_max):
             fake_data = Generator(SUB_BATCH_SIZE)
 
             disc_real = Discriminator(real_data)
@@ -49,8 +49,6 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                 # gradient_penalty = tf.reduce_sum(tf.square(gradients), reduction_indices=[1])
 
                 if MODE == 'wgan-gs':
-                    # aggregator = tf.reduce_max
-                    aggregator = tf.reduce_mean
                     print "gradient shrinking", aggregator
                     norm_factor = aggregator(initial_slopes)
                     disc_real /= norm_factor

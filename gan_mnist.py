@@ -23,8 +23,9 @@ from tensorflow.contrib.tensorboard.plugins import projector
 
 import util
 import losses
+import gan_logging
 
-MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
+MODE = 'wgan-gs' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
@@ -35,10 +36,13 @@ OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = True if (MODE=='wgan') else False
 ACTIVATION_PENALTY = 0.0
 USE_DENSE_DISCRIMINATOR = False
-GRADIENT_SHRINKING = False
-SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "softmax"
 OPTIMIZE_SLOPE=False
-lower_alpha, upper_alpha = 0.0, 1.0
+AGGREGATOR = tf.reduce_max
+aggregator_names = {
+    tf.reduce_max: "max",
+    tf.reduce_mean: "mean"
+}
+SAVE_GENERATED=True
 
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
@@ -201,7 +205,7 @@ elif MODE in ('wgan-gp', 'wgan-gs'):
     gen_cost, disc_cost, initial_slopes, final_slopes = losses.calculate_losses(
             BATCH_SIZE, real_data,
             Generator, Discriminator,
-            MODE, alpha_strategy, LAMBDA)
+            MODE, alpha_strategy, LAMBDA, AGGREGATOR)
 
     gen_optimizer = tf.train.AdamOptimizer(
         learning_rate=1e-4,
@@ -277,18 +281,13 @@ def inf_train_gen():
 with tf.Session() as session:
 
     session.run(tf.global_variables_initializer())
-    #session.run(tf.initialize_all_variables())
 
-    if MODE=='wgan-gp':
-        if GRADIENT_SHRINKING:
-            session_name = "wgan-gs-%.2f-%.2f-lambda%.2f-%s" % (lower_alpha, upper_alpha, LAMBDA, SHRINKING_REDUCTOR)
-        else:
-            session_name = "%s-%.2f-%.2f-lambda%.2f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
-    elif MODE=='wgan':
+    if MODE=='wgan':
         session_name = "%s-batchnorm=%s" % (MODE, DO_BATCHNORM)
     elif MODE=='dcgan':
         session_name = "%s" % (MODE)
-
+    else:
+        session_name = "%s-%s-lambda%.2f-%s" % (MODE, alpha_strategy, LAMBDA, aggregator_names[AGGREGATOR])
     LOG_DIR = "logs/%s" % session_name
 
     summary_writer = tf.summary.FileWriter(LOG_DIR, graph=tf.get_default_graph())
@@ -320,10 +319,9 @@ with tf.Session() as session:
     alphas1 = tf.expand_dims(alphas, axis=-1)
     real_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, 784))
     real_data_ph1 = tf.expand_dims(real_data_ph, axis=1)
-    fake_data = Generator(BATCH_SIZE)
-    fake_data = tf.expand_dims(fake_data, axis=1)
+    fake_data2 = tf.expand_dims(fake_data, axis=1)
 
-    x = alphas1*fake_data + (1-alphas1)*real_data_ph1
+    x = alphas1*fake_data2 + (1-alphas1)*real_data_ph1
 
     alpha_to_disc_cost_op = Discriminator(x)
 
@@ -346,6 +344,9 @@ with tf.Session() as session:
     tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
 
     tf.summary.image("generated", tf.reshape(fixed_noise_samples, (128, 28, 28, 1)), max_outputs=50)
+
+    # plot discriminator accuracy
+    gan_logging.log_disc_accuracy(disc_real, disc_fake, BATCH_SIZE)
 
     merged_summary_op = tf.summary.merge_all()
 
@@ -431,14 +432,25 @@ with tf.Session() as session:
             #                 real_data_ph: heldout_minibatch,
             #                 lambda_tf: BLAMBDA})
             # alpha_to_disc_cost = alpha_to_disc_cost[0].reshape((BATCH_SIZE, ALPHA_COUNT))
-#            print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
-
-#            np.save(os.path.join(LOG_DIR, 'alpha_to_disc_cost_gp05_%d.npy' % iteration), alpha_to_disc_cost)
-#            print '----- Alpha_to_disc_cost numpy array saved -----'
+            #            print alpha_to_disc_cost.shape, alpha_to_disc_cost[:11]
+            
+            #            np.save(os.path.join(LOG_DIR, 'alpha_to_disc_cost_gp05_%d.npy' % iteration), alpha_to_disc_cost)
+            #            print '----- Alpha_to_disc_cost numpy array saved -----'
 
             if iteration % 500 == 0:
                 saver = tf.train.Saver()
                 saver.save(session, os.path.join(LOG_DIR, "model.ckpt"), iteration)
+
+            if SAVE_GENERATED and (iteration > 0) and (iteration % 10000  == 0):
+                # save 200 * BATCH_SIZE generated images
+                fakes = []
+                for i in range(200):
+                    fake=(session.run(fake_data))
+                    fakes.append(fake.copy())
+                fakes = np.concatenate(fakes, axis=0)
+                filename = "/mnt/g2big/generated_images/mnist/generated_{}_{}.npy".format(MODE, iteration)
+                print "Saving generated samples to {}".format(filename)
+                np.save(filename, fakes)
 
             summary = session.run([merged_summary_op],
                 feed_dict={ real_data: heldout_minibatch,
@@ -450,7 +462,7 @@ with tf.Session() as session:
             summary_writer.add_summary(summary[0], iteration)
 
         # Write logs every 100 iters
-        if (iteration < 5) or (iteration % 100 == 99):
+        if (iteration < 5) or (iteration % 100 == 0):
             lib.plot.flush()
 
         lib.plot.tick()

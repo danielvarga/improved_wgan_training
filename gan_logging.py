@@ -50,3 +50,9 @@ def log_slopes(BATCH_SIZE, OUTPUT_DIM, ALPHA_COUNT, Generator, Discriminator, fi
     tf.summary.image("generated", tf.reshape(fixed_noise_samples, (128, 28, 28, 1)), max_outputs=50)
 
     return alphas, real_data_ph, slopes_for_alphas
+
+def log_disc_accuracy(disc_real, disc_fake, length):
+    combined = tf.concat([disc_real, disc_fake], axis=0)
+    values, indices = tf.nn.top_k(combined, k=length)
+    accuracy = tf.reduce_mean(tf.cast(indices < length, tf.float32))
+    tf.summary.scalar("accuracy", accuracy)
