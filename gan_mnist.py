@@ -25,13 +25,13 @@ import util
 import losses
 import gan_logging
 
-MODE = 'wgan-gs' # dcgan, wgan, or wgan-gp
+MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
 LAMBDA = 10 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0.0
-ITERS = 20000 # How many generator iterations to train for 
+ITERS = 50000 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = True if (MODE=='wgan') else False
 ACTIVATION_PENALTY = 0.0
@@ -42,11 +42,11 @@ aggregator_names = {
     tf.reduce_max: "max",
     tf.reduce_mean: "mean"
 }
-SAVE_GENERATED=True
+SAVE_GENERATED=False
 
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
-DIRNAME="pictures"
+DIRNAME="pictures/wgan_gp_mnist_reinitialized"
 if not os.path.exists(DIRNAME):
     os.mkdir(DIRNAME)
 
@@ -167,7 +167,7 @@ gen_params = lib.params_with_name('Generator')
 disc_params = lib.params_with_name('Discriminator')
 
 disc_filters = [param for param_name, param in lib._params.iteritems() if param_name.startswith("Discriminator") and param_name.endswith("Filters")]
-
+disc_weights = tf.concat([tf.reshape(filter, [-1]) for filter in disc_filters], axis=0)
 
 def activation_to_loss(activation):
     return tf.reduce_mean(tf.maximum(0.0,tf.square(activation) - 1.0))
@@ -314,36 +314,7 @@ with tf.Session() as session:
     tf.summary.scalar("disc_cost", disc_cost)
 
     ALPHA_COUNT = 100
-
-    alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
-    alphas1 = tf.expand_dims(alphas, axis=-1)
-    real_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, 784))
-    real_data_ph1 = tf.expand_dims(real_data_ph, axis=1)
-    fake_data2 = tf.expand_dims(fake_data, axis=1)
-
-    x = alphas1*fake_data2 + (1-alphas1)*real_data_ph1
-
-    alpha_to_disc_cost_op = Discriminator(x)
-
-    grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)[0]
-
-    grad_by_x = tf.gradients(Discriminator(x), [x])[0]
-    slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[2]))
-
-    x2 = tf.random_uniform(x.shape, minval=0, maxval=1)
-    grad_by_x2 = tf.gradients(Discriminator(x2), [x2])[0]
-    slopes_for_x2 = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x2), reduction_indices=[2]))
-    tf.summary.histogram("slopes_at_random", slopes_for_x2)
-    
-    tf.summary.histogram("slopes_for_all_alphas", slopes_for_alphas)
-    tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
-    tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
-
-    tf.summary.histogram("unidirectional_grad_at_all_alphas", grad_by_alphas)
-    tf.summary.histogram("unidirectional_grad_at_alpha0", grad_by_alphas[:, 0])
-    tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
-
-    tf.summary.image("generated", tf.reshape(fixed_noise_samples, (128, 28, 28, 1)), max_outputs=50)
+    alphas, real_data_ph, slopes_for_alphas = gan_logging.log_slopes(BATCH_SIZE, OUTPUT_DIM, ALPHA_COUNT, Generator, Discriminator, fixed_noise_samples)
 
     # plot discriminator accuracy
     gan_logging.log_disc_accuracy(disc_real, disc_fake, BATCH_SIZE)
@@ -366,12 +337,18 @@ with tf.Session() as session:
         BLAMBDA = LAMBDA #np.array([LAMBDA]*1)
         #print BLAMBDA.shape
 
-        if iteration > 0:
+        if iteration > 0 and iteration < 20000: # TODO freezing generator
             _ = session.run(gen_train_op,
                             feed_dict={
                                 real_data:_data,
                                 WEIGHT_NOISE_SIGMA:0.0}
             )
+        if iteration == 20000:
+            print "freezing generator"
+        if iteration == 30000: # TODO reinitialize discriminator
+            print "initializing discriminator"
+            disc_initializers = [var.initializer for var in tf.global_variables() if 'Discriminator' in var.name]
+            session.run(disc_initializers)
 
         if MODE == 'dcgan':
             disc_iters = 1
