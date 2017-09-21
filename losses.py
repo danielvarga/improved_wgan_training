@@ -61,4 +61,4 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                         print "are you sure you want a LAMBDA=0 wgan-gp?"
                     disc_cost += LAMBDA * gradient_penalty
 
-            return gen_cost, disc_cost, initial_slopes, final_slopes
+            return gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty

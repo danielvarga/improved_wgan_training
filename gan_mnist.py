@@ -19,7 +19,7 @@ import tflib.save_images
 import tflib.mnist
 import tflib.plot
 
-from tensorflow.contrib.tensorboard.plugins import projector
+# from tensorflow.contrib.tensorboard.plugins import projector
 
 import util
 import losses
@@ -202,7 +202,7 @@ if MODE == 'wgan':
 elif MODE in ('wgan-gp', 'wgan-gs'):
     alpha_strategy = "uniform"
 
-    gen_cost, disc_cost, initial_slopes, final_slopes = losses.calculate_losses(
+    gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty = losses.calculate_losses(
             BATCH_SIZE, real_data,
             Generator, Discriminator,
             MODE, alpha_strategy, LAMBDA, AGGREGATOR)
@@ -225,6 +225,7 @@ elif MODE in ('wgan-gp', 'wgan-gs'):
 
     # monitor gradient normalization effect on individual weights
     slope_grad_by_weight = tf.gradients(initial_slopes, disc_filters)
+#    slope_grad_by_weight = tf.gradients(gradient_penalty, disc_filters)
 
     clip_disc_weights = None
 
@@ -407,9 +408,12 @@ with tf.Session() as session:
                     filter = _disc_filters[i]
                     grads = _slope_grad_by_weight[i]
                     name = disc_names[i].replace("/", ".")
-                    plt.clf()
-                    plt.scatter(filter.flatten(), grads.flatten(), c='green', marker='+')
-                    plt.savefig(DIRNAME + "/grad_by_weight_{}_{}.png".format(name,iteration))
+                    filename = DIRNAME + "/grad_by_weight_{}_{}.png".format(name,iteration)
+                    util.scatterWithMarginals(filter.flatten(), grads.flatten(), name, filename)
+
+                    # plt.clf()
+                    # plt.scatter(filter.flatten(), grads.flatten(), c='green', marker='+')
+                    # plt.savefig(filename)
             
             # alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
             #     feed_dict={

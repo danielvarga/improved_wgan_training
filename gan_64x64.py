@@ -501,7 +501,7 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
             if MODE in ('wgan-gp', 'wgan-gs'):
                 alpha_strategy = "uniform"
 
-                gen_cost, disc_cost, initial_slopes, final_slopes = losses.calculate_losses(
+                gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty = losses.calculate_losses(
                     sub_batch_size, real_data,
                     Generator, Discriminator,
                     MODE, alpha_strategy, LAMBDA)
@@ -586,6 +586,7 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
     #train_gen, dev_gen = lib.small_imagenet.load(BATCH_SIZE, data_dir=DATA_DIR)
     # train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/csadrian/datasets/bedroom_64_64.npy")
     train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/daniel/experiments/mixture-layer/celeba_64_64_color.npy")
+#    train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/zombori/datasets/celeba_64_64_color.npy")
 
     def inf_train_gen():
         while True:

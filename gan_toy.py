@@ -76,7 +76,7 @@ gen_cost = -tf.reduce_mean(disc_fake)
 if MODE in ('wgan-gp', 'wgan-gs'):
     alpha_strategy = "uniform"
 
-    gen_cost, disc_cost, initial_slopes, final_slopes = losses.calculate_losses(
+    gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty = losses.calculate_losses(
             BATCH_SIZE, real_data,
             Generator, Discriminator,
             MODE, alpha_strategy, LAMBDA)
