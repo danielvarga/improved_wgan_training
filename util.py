@@ -24,19 +24,27 @@ def find_greatest_slopes(discriminator, images, iters, lr, session):
 def scatterWithMarginals(xs, ys, title, filename):
     d = {"x": xs, "y": ys}
     df = pd.DataFrame(data=d)
-    sns_plot = sns.jointplot(x="x", y="y", data=df, kind="kde")
+    sns_plot = sns.jointplot(x="x", y="y", data=df, kind="hex")
     sns_plot.fig.suptitle(title)
     sns_plot.savefig(filename)
 
+def jacobian(y_flat, x):
+    n = y_flat.shape[0]
 
- #    # weight regularization
- # -    if WEIGHT_DECAY_FACTOR > 0:
- # -
- # -        with tf.variable_scope('weights_norm') as scope:
- # -            weight_loss = tf.reduce_sum(
- # -                input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
- # -                    [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
- # -                ),
- # -                name='weight_loss'
- # -            )
- # -        disc_cost += weight_loss
+    loop_vars = [
+        tf.constant(0, tf.int32),
+        tf.TensorArray(tf.float32, size=n),
+    ]
+
+    _, jacobian = tf.while_loop(
+        lambda j, _: j < n,
+        lambda j, result: (j+1, result.write(j, tf.gradients(y_flat[j], x))),
+        loop_vars)
+    result = jacobian.stack()
+    return result
+
+def get_weight_loss(weights, wd):
+    scope = tf.variable_scope('weights_norm')
+    losses = [tf.nn.l2_loss(var) for var in weights]
+    weight_loss = wd * tf.stack(losses)
+    return weight_loss
