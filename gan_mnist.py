@@ -30,7 +30,7 @@ DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
 LAMBDA = 10 # Gradient penalty lambda hyperparameter
-WEIGHT_DECAY_FACTOR = 0.0
+WEIGHT_DECAY = 0.0
 ITERS = 20000 # How many generator iterations to train for 
 OUTPUT_DIM = 784 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = True if (MODE=='wgan') else False
@@ -121,7 +121,8 @@ def Generator(n_samples, noise=None):
 
     return tf.reshape(output, [-1, OUTPUT_DIM])
 
-def Discriminator(inputs):
+def Discriminator(inputs, remember_last_activation=False):
+    global last_layer_activation
     output = tf.reshape(inputs, [-1, 1, 28, 28])
 
     output = lib.ops.conv2d.Conv2D('Discriminator.1',1,DIM,5,output,stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
@@ -138,6 +139,8 @@ def Discriminator(inputs):
     output = LeakyReLU(output)
 
     output = tf.reshape(output, [-1, 4*4*4*DIM])
+    if remember_last_activation:
+        last_layer_activation = output
     output = lib.ops.linear.Linear('Discriminator.Output', 4*4*4*DIM, 1, output)
 
     return tf.reshape(output, [-1])
@@ -168,6 +171,7 @@ disc_params = lib.params_with_name('Discriminator')
 
 disc_filters = [param for param_name, param in lib._params.iteritems() if param_name.startswith("Discriminator") and (param_name.endswith("Filters") or param_name.endswith("W"))]
 disc_names = [param_name for param_name, param in lib._params.iteritems() if param_name.startswith("Discriminator") and (param_name.endswith("Filters") or param_name.endswith("W"))]
+disc_output_weights = [param for param_name, param in lib._params.iteritems() if param_name.startswith("Discriminator") and "Output.W" in param_name][0]
 
 def activation_to_loss(activation):
     return tf.reduce_mean(tf.maximum(0.0,tf.square(activation) - 1.0))
@@ -203,9 +207,12 @@ elif MODE in ('wgan-gp', 'wgan-gs'):
     alpha_strategy = "uniform"
 
     gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty = losses.calculate_losses(
-            BATCH_SIZE, real_data,
-            Generator, Discriminator,
-            MODE, alpha_strategy, LAMBDA, AGGREGATOR)
+        BATCH_SIZE, real_data,
+        Generator, Discriminator,
+        MODE, alpha_strategy, LAMBDA, AGGREGATOR,
+        WEIGHT_DECAY=WEIGHT_DECAY, params_for_wd=disc_params,
+        remember_last_activation=True
+    )
 
     gen_optimizer = tf.train.AdamOptimizer(
         learning_rate=1e-4,
@@ -224,8 +231,9 @@ elif MODE in ('wgan-gp', 'wgan-gs'):
     disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
 
     # monitor gradient normalization effect on individual weights
+    #    slope_grad_by_weight = tf.gradients(gradient_penalty, disc_filters)
     slope_grad_by_weight = tf.gradients(initial_slopes, disc_filters)
-#    slope_grad_by_weight = tf.gradients(gradient_penalty, disc_filters)
+    slope_jacobian_by_weight = util.jacobian(initial_slopes, disc_output_weights)
 
     clip_disc_weights = None
 
@@ -380,40 +388,26 @@ with tf.Session() as session:
 
             generate_image(iteration, _data)
             
-            # get slopes
-            _slopes_for_alphas = session.run([slopes_for_alphas],
-                                            feed_dict={alphas:alpha_grid,
-                                                       real_data_ph:heldout_minibatch,
-                                                       lambda_tf: BLAMBDA,
-                                                       WEIGHT_NOISE_SIGMA:0.0
-                                            }
-            )
-            _slopes_for_alphas = _slopes_for_alphas[0]
-            _slopes_for_alphas2 = session.run([slopes_for_alphas],
-                                            feed_dict={alphas:alpha_grid,
-                                                       real_data_ph:heldout_minibatch,
-                                                       lambda_tf: BLAMBDA,
-                                                       WEIGHT_NOISE_SIGMA:0.01
-                                            }
-            )
-            _slopes_for_alphas2 = _slopes_for_alphas2[0]
-            print("Slopes before noise: ", np.mean(_slopes_for_alphas[:,::20], axis=0))
-            print("Slopes after  noise: ", np.mean(_slopes_for_alphas2[:,::20], axis=0))
+            # # get slopes
+            # _slopes_for_alphas = session.run([slopes_for_alphas],
+            #                                 feed_dict={alphas:alpha_grid,
+            #                                            real_data_ph:heldout_minibatch,
+            #                                            lambda_tf: BLAMBDA,
+            #                                            WEIGHT_NOISE_SIGMA:0.0
+            #                                 }
+            # )
+            # _slopes_for_alphas = _slopes_for_alphas[0]
+            # _slopes_for_alphas2 = session.run([slopes_for_alphas],
+            #                                 feed_dict={alphas:alpha_grid,
+            #                                            real_data_ph:heldout_minibatch,
+            #                                            lambda_tf: BLAMBDA,
+            #                                            WEIGHT_NOISE_SIGMA:0.01
+            #                                 }
+            # )
+            # _slopes_for_alphas2 = _slopes_for_alphas2[0]
+            # print("Slopes before noise: ", np.mean(_slopes_for_alphas[:,::20], axis=0))
+            # print("Slopes after  noise: ", np.mean(_slopes_for_alphas2[:,::20], axis=0))
 
-            if MODE in ('wgan-gp', 'wgan-gs'):
-                _disc_filters, _slope_grad_by_weight = session.run([disc_filters, slope_grad_by_weight],
-                                                                    feed_dict={real_data:images}
-                                                                )
-                for i in range(len(_disc_filters)):
-                    filter = _disc_filters[i]
-                    grads = _slope_grad_by_weight[i]
-                    name = disc_names[i].replace("/", ".")
-                    filename = DIRNAME + "/grad_by_weight_{}_{}.png".format(name,iteration)
-                    util.scatterWithMarginals(filter.flatten(), grads.flatten(), name, filename)
-
-                    # plt.clf()
-                    # plt.scatter(filter.flatten(), grads.flatten(), c='green', marker='+')
-                    # plt.savefig(filename)
             
             # alpha_to_disc_cost = session.run([alpha_to_disc_cost_op],
             #     feed_dict={
@@ -426,9 +420,25 @@ with tf.Session() as session:
             #            np.save(os.path.join(LOG_DIR, 'alpha_to_disc_cost_gp05_%d.npy' % iteration), alpha_to_disc_cost)
             #            print '----- Alpha_to_disc_cost numpy array saved -----'
 
-            if iteration % 500 == 0:
+            if (iteration % 500 == 0) and (iteration > 0):
                 saver = tf.train.Saver()
                 saver.save(session, os.path.join(LOG_DIR, "model.ckpt"), iteration)
+
+                if MODE in ('wgan-gp', 'wgan-gs'):
+                    _disc_filters, _slope_grad_by_weight = session.run([disc_filters, slope_grad_by_weight],
+                                                                       feed_dict={real_data:images}
+                                                                   )
+                    for i in range(len(_disc_filters)):
+                        filter = _disc_filters[i]
+                        grads = _slope_grad_by_weight[i]
+                        name = disc_names[i].replace("/", ".")
+                        filename = DIRNAME + "/grad_by_weight_{}_{}.png".format(name,iteration)
+                        util.scatterWithMarginals(filter.flatten(), grads.flatten(), name, filename)
+
+                        # plt.clf()
+                        # plt.scatter(filter.flatten(), grads.flatten(), c='green', marker='+')
+                        # plt.savefig(filename)
+ 
 
             if SAVE_GENERATED and (iteration > 0) and (iteration % 10000  == 0):
                 # save 200 * BATCH_SIZE generated images
@@ -455,6 +465,17 @@ with tf.Session() as session:
             lib.plot.flush()
 
         lib.plot.tick()
+
+    if MODE in ('wgan-gp', 'wgan-gs'): # save last layer activations, weights and activations
+        images, _ = dev_gen().next()
+        _disc_output_weights, _slope_jacobian, _last_layer_activation, _slope = session.run([disc_output_weights, slope_jacobian_by_weight, last_layer_activation, initial_slopes],
+                                                                                            feed_dict={real_data:images}
+        )
+        _disc_output_weights = np.squeeze(_disc_output_weights)
+        _slope_jacobian = np.squeeze(_slope_jacobian)
+        np.savez(DIRNAME+"/last_layer.npz", activations=_last_layer_activation, weights=_disc_output_weights, slopes=_slope, jacobian=_slope_jacobian)
+            
+
 
     if OPTIMIZE_SLOPE:
         fake_images = session.run(fixed_noise_samples)

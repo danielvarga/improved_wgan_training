@@ -44,7 +44,17 @@ def jacobian(y_flat, x):
     return result
 
 def get_weight_loss(weights, wd):
-    scope = tf.variable_scope('weights_norm')
     losses = [tf.nn.l2_loss(var) for var in weights]
-    weight_loss = wd * tf.stack(losses)
+    weight_loss = wd * tf.reduce_sum(losses)
     return weight_loss
+
+    # with tf.variable_scope('weights_norm') as scope:
+    #     weight_loss = tf.reduce_sum(
+    #         input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
+    #             [tf.nn.l2_loss(tf.maximum(var for var in disc_filters]
+    #         ),
+    #         name='weight_loss'
+    #     )
+    # return weight_loss
+
+    #   scope = tf.variable_scope('weights_norm')

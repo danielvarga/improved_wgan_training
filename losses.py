@@ -1,6 +1,7 @@
 import tensorflow as tf
+import util
 
-def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, alpha_strategy, LAMBDA, aggregator = tf.reduce_max):
+def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, alpha_strategy, LAMBDA, aggregator = tf.reduce_max, WEIGHT_DECAY=0.0, params_for_wd=None, remember_last_activation=False):
             fake_data = Generator(SUB_BATCH_SIZE)
 
             disc_real = Discriminator(real_data)
@@ -33,7 +34,12 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
 
                 differences = fake_data - real_data
                 interpolates = real_data + (alpha*differences)
-                gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
+                
+                if remember_last_activation:
+                            gradients = tf.gradients(Discriminator(interpolates, remember_last_activation=remember_last_activation), [interpolates])[0]
+                else:
+                            gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
+
                 initial_slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
                 final_slopes = initial_slopes
 
@@ -60,5 +66,9 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                     if LAMBDA == 0:
                         print "are you sure you want a LAMBDA=0 wgan-gp?"
                     disc_cost += LAMBDA * gradient_penalty
+            
+            if WEIGHT_DECAY > 0:
+                        print "Applying weight decay: ", WEIGHT_DECAY
+                        disc_cost += util.get_weight_loss(params_for_wd, WEIGHT_DECAY)
 
             return gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty
