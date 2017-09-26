@@ -29,7 +29,7 @@ BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
 LAMBDA = 10 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
-ITERS = 1000 # How many generator iterations to train for
+ITERS = 2000 # How many generator iterations to train for
 OUTPUT_DIM = 28*28 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
@@ -215,7 +215,6 @@ elif MODE == 'wgan-gp':
 
     # weight regularization
     if WEIGHT_DECAY_FACTOR > 0:
-
         with tf.variable_scope('weights_norm') as scope:
             weight_loss = tf.reduce_sum(
                 input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
@@ -255,6 +254,19 @@ elif MODE == 'dcgan':
     ))
     disc_cost /= 2.
 
+    # weight regularization
+    if WEIGHT_DECAY_FACTOR > 0:
+        with tf.variable_scope('weights_norm') as scope:
+            weight_loss = tf.reduce_sum(
+                input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
+                    [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+                ),
+                name='weight_loss'
+            )
+        disc_cost += weight_loss
+    else:
+        weight_loss = tf.constant(0.0)
+
     HARD_MARGIN_WEIGHT = 0.0
     if HARD_MARGIN_WEIGHT != 0:
         print "!!!!!!!!!!!!!!!!"
@@ -289,12 +301,17 @@ def load(target_digits):
     reals_train = X_train[y_train==target_digits[0]]
     fakes_train = X_train[y_train==target_digits[1]]
 
-    trunc = 500 # circa 5500 is the untruncated size.
+    trunc = 200 # circa 5500 is the untruncated size.
     reals_train = reals_train[:trunc]
     fakes_train = fakes_train[:trunc]
 
     reals_test  = X_test [y_test ==target_digits[0]]
     fakes_test  = X_test [y_test ==target_digits[1]]
+
+    print "TARGET DIGITS", target_digits
+    print "TRAIN DATA SIZE", len(reals_train), len(fakes_train)
+    print "TEST DATA SIZE", len(reals_test), len(fakes_test)
+
     return (reals_train, fakes_train), (reals_test, fakes_test)
 
 def generator(data, batch_size, infinity=True):
@@ -308,7 +325,7 @@ def generator(data, batch_size, infinity=True):
         if not infinity:
             break
 
-(reals_train, fakes_train), (reals_test, fakes_test) = load(target_digits = (5, 8))
+(reals_train, fakes_train), (reals_test, fakes_test) = load(target_digits = (2, 3))
 
 real_gen = generator(reals_train, BATCH_SIZE)
 fake_gen = generator(fakes_train, BATCH_SIZE)
