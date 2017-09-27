@@ -1,7 +1,7 @@
 import tensorflow as tf
 import util
 
-def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, alpha_strategy, LAMBDA, aggregator = tf.reduce_max, WEIGHT_DECAY=0.0, params_for_wd=None, remember_last_activation=False):
+def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, alpha_strategy, LAMBDA, aggregator = tf.reduce_max, WEIGHT_DECAY=0.0, params_for_wd=None, remember_last_activation=False, use_random_flag_ph=None):
             fake_data = Generator(SUB_BATCH_SIZE)
 
             disc_real = Discriminator(real_data)
@@ -17,7 +17,7 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
 
                 print "alpha_strategy", alpha_strategy
 
-                if alpha_strategy == "uniform":
+                if "uniform" in alpha_strategy:
                     # Original WGAN-GP interpolation:
                     alpha = tf.random_uniform(
                         shape=[SUB_BATCH_SIZE,1], 
@@ -31,10 +31,21 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                     alpha = tf.ones([SUB_BATCH_SIZE,1])
                 elif alpha_strategy == "real":
                     alpha = tf.zeros([SUB_BATCH_SIZE,1])
+                    
+                if "random" in alpha_strategy:
+                    random_points = tf.random_uniform(real_data.shape, minval=0, maxval=1)
 
-                differences = fake_data - real_data
-                interpolates = real_data + (alpha*differences)
-                
+                if alpha_strategy == "random": # controlling slopes at random points
+                            interpolates = random_points
+                else:
+                            differences = fake_data - real_data
+                            interpolates = real_data + (alpha*differences)
+
+                if alpha_strategy == "uniform_to_random":
+                            assert use_random_flag_ph is not None
+                            interpolates = use_random_flag_ph * random_points + (1-use_random_flag_ph) * interpolates
+
+                            
                 if remember_last_activation:
                             gradients = tf.gradients(Discriminator(interpolates, remember_last_activation=remember_last_activation), [interpolates])[0]
                 else:
@@ -71,4 +82,4 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                         print "Applying weight decay: ", WEIGHT_DECAY
                         disc_cost += util.get_weight_loss(params_for_wd, WEIGHT_DECAY)
 
-            return gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty
+            return gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty, use_random_flag_ph

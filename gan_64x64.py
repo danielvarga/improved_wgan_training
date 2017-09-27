@@ -30,15 +30,20 @@ DATA_DIR = ''
 #if len(DATA_DIR) == 0:
 #    raise Exception('Please specify path to data directory in gan_64x64.py!')
 
-MODE = 'wgan-gs' # dcgan, wgan, wgan-gp, lsgan, wgan-gs
+MODE = 'wgan-gp' # dcgan, wgan, wgan-gp, lsgan, wgan-gs
 DIM = 64 # Model dimensionality
 CRITIC_ITERS = 5 # How many iterations to train the critic for
 N_GPUS = 1 # Number of GPUs
 BATCH_SIZE = 64 # Batch size. Must be a multiple of N_GPUS
 ITERS = 200000 # How many iterations to train for
-LAMBDA = 0 # Gradient penalty lambda hyperparameter
+LAMBDA = 10 # Gradient penalty lambda hyperparameter
 OUTPUT_DIM = 64*64*3 # Number of pixels in each iamge
 FUSED = False
+alpha_strategy = "uniform_to_random"
+alpha_strategy_switch = 1000
+DIRNAME="pictures/wgan_gp_celeba_random"
+if not os.path.exists(DIRNAME):
+    os.mkdir(DIRNAME)
 
 lib.print_model_settings(locals().copy())
 
@@ -468,13 +473,14 @@ def DCGANDiscriminator(inputs, dim=DIM, bn=True, nonlinearity=LeakyReLU):
 
 
 def session_name():
-    return MODE + "-temporary_session_name"
-
+    #    return MODE + "-temporary_session_name"
+    return DIRNAME
 
 Generator, Discriminator = GeneratorAndDiscriminator()
 
 
 with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
+    use_random_flag_ph = tf.placeholder(tf.float32, shape=[])
 
     LOG_DIR = "logs/%s" % session_name()
     summary_writer = tf.summary.FileWriter(LOG_DIR, graph=tf.get_default_graph())
@@ -499,12 +505,12 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
             disc_fake = Discriminator(fake_data)
 
             if MODE in ('wgan-gp', 'wgan-gs'):
-                alpha_strategy = "uniform"
 
-                gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty = losses.calculate_losses(
+                gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty, use_random_flag_ph = losses.calculate_losses(
                     sub_batch_size, real_data,
                     Generator, Discriminator,
-                    MODE, alpha_strategy, LAMBDA)
+                    MODE, alpha_strategy, LAMBDA,
+                    use_random_flag_ph=use_random_flag_ph)
 
             elif MODE == 'dcgan':
                 try: # tf pre-1.0 (bottom) vs 1.0 (top)
@@ -579,14 +585,14 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
     def generate_image(iteration):
         samples = session.run(all_fixed_noise_samples)
         samples = ((samples+1.)*(255.99/2)).astype('int32')
-        lib.save_images.save_images(samples.reshape((BATCH_SIZE, 3, 64, 64)), 'samples_{}.png'.format(iteration))
+        lib.save_images.save_images(samples.reshape((BATCH_SIZE, 3, 64, 64)), '{}/samples_{}.png'.format(DIRNAME, iteration))
 
 
     # Dataset iterator
     #train_gen, dev_gen = lib.small_imagenet.load(BATCH_SIZE, data_dir=DATA_DIR)
     # train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/csadrian/datasets/bedroom_64_64.npy")
-    train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/daniel/experiments/mixture-layer/celeba_64_64_color.npy")
-#    train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/zombori/datasets/celeba_64_64_color.npy")
+#    train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/daniel/experiments/mixture-layer/celeba_64_64_color.npy")
+    train_gen, dev_gen = lsun.load(BATCH_SIZE, "/home/zombori/datasets/celeba_64_64_color.npy")
 
     def inf_train_gen():
         while True:
@@ -597,27 +603,34 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
     _x = inf_train_gen().next()
     _x_r = session.run(real_data, feed_dict={real_data_conv: _x[:BATCH_SIZE/N_GPUS]})
     _x_r = ((_x_r+1.)*(255.99/2)).astype('int32')
-    lib.save_images.save_images(_x_r.reshape((BATCH_SIZE/N_GPUS, 3, 64, 64)), 'samples_groundtruth.png')
+    lib.save_images.save_images(_x_r.reshape((BATCH_SIZE/N_GPUS, 3, 64, 64)), '{}/samples_groundtruth.png'.format(DIRNAME))
 
 
     # Train loop
-    session.run(tf.initialize_all_variables())
+    session.run(tf.global_variables_initializer())
 
     tf.summary.scalar("disc_cost", disc_cost)
     if LAMBDA > 0:
         tf.summary.scalar("gradient_penalty", gradient_penalty)
 
-    ALPHA_COUNT = 100
 
-    # alphas, real_data_ph, slopes_for_alphas = gan_logging.log_slopes(BATCH_SIZE, OUTPUT_DIM, ALPHA_COUNT, Generator, Discriminator, fixed_noise_samples)
+    real_data_ph = gan_logging.log_slopes_small(BATCH_SIZE, OUTPUT_DIM, Generator, Discriminator)
+    # plot discriminator accuracy
+    gan_logging.log_disc_accuracy(disc_real, disc_fake, BATCH_SIZE)
 
     merged_summary_op = tf.summary.merge_all()
+
+    for (heldout_minibatch,) in dev_gen():
+        break
+    heldout_minibatch = np.reshape(heldout_minibatch, [-1, OUTPUT_DIM])
 
 
     gen = inf_train_gen()
     for iteration in xrange(ITERS):
 
         start_time = time.time()
+
+        use_random_flag = np.float32(iteration > alpha_strategy_switch)
 
         # Train generator
         if iteration > 0:
@@ -631,12 +644,16 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
             disc_iters = CRITIC_ITERS
         for i in xrange(disc_iters):
             _data = gen.next()
-            _disc_cost, _ = session.run([disc_cost, disc_train_op], feed_dict={all_real_data_conv: _data})
+            _disc_cost, _ = session.run([disc_cost, disc_train_op], feed_dict={
+                use_random_flag_ph:use_random_flag,
+                all_real_data_conv: _data
+            })
             if MODE == 'wgan':
                 _ = session.run([clip_disc_weights])
 
         lib.plot.plot('train disc cost', _disc_cost)
         lib.plot.plot('time', time.time() - start_time)
+        lib.plot.plot('use_random_flag', use_random_flag)
 
         # currently abandoned. the first attempt to quantify image diversity didn't pan out.
         def image_variance():
@@ -650,7 +667,7 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
             t = time.time()
             dev_disc_costs = []
             for (images,) in dev_gen():
-                _dev_disc_cost = session.run(disc_cost, feed_dict={all_real_data_conv: images}) 
+                _dev_disc_cost = session.run(disc_cost, feed_dict={all_real_data_conv: images, use_random_flag_ph: use_random_flag}) 
                 dev_disc_costs.append(_dev_disc_cost)
             lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
 
@@ -659,4 +676,11 @@ with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
         if (iteration < 5) or (iteration % 200 == 199):
             lib.plot.flush()
 
+            summary = session.run([merged_summary_op],
+                                  feed_dict={
+                                      use_random_flag_ph:use_random_flag,
+                                      real_data_ph: heldout_minibatch, 
+                                      all_real_data_conv: images
+                                  })
+            summary_writer.add_summary(summary[0], iteration)
         lib.plot.tick()
