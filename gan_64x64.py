@@ -36,10 +36,10 @@ CRITIC_ITERS = 5 # How many iterations to train the critic for
 N_GPUS = 1 # Number of GPUs
 BATCH_SIZE = 64 # Batch size. Must be a multiple of N_GPUS
 ITERS = 200000 # How many iterations to train for
-LAMBDA = 10 # Gradient penalty lambda hyperparameter
+LAMBDA = 100 # Gradient penalty lambda hyperparameter
 OUTPUT_DIM = 64*64*3 # Number of pixels in each iamge
 FUSED = False
-alpha_strategy = "uniform_to_random"
+alpha_strategy = "random"
 alpha_strategy_switch = 1000
 DIRNAME="pictures/wgan_gp_celeba_random"
 if not os.path.exists(DIRNAME):
@@ -474,7 +474,7 @@ def DCGANDiscriminator(inputs, dim=DIM, bn=True, nonlinearity=LeakyReLU):
 
 def session_name():
     #    return MODE + "-temporary_session_name"
-    return DIRNAME
+    return DIRNAME.replace("/", ".")
 
 Generator, Discriminator = GeneratorAndDiscriminator()
 
