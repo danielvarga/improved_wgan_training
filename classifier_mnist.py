@@ -38,6 +38,10 @@ GRADIENT_SHRINKING = False
 SHRINKING_REDUCTOR = "mean" # "none", "max", "mean", "softmax"
 lower_alpha, upper_alpha = 0.0, 1.0
 
+TARGET_DIGITS = 2, 8
+# number of elements in one class, total number is twice this:
+TRAIN_DATASET_SIZE = 1000
+
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
 DIRNAME="pictures"
@@ -297,7 +301,7 @@ elif MODE == 'dcgan':
 
 # Dataset iterator
 
-def load(target_digits):
+def load(target_digits, train_dataset_size):
     (X_train, y_train), (X_test, y_test) = mnist.load_data()
 
     # flatten the 28x28 images to arrays of length 28*28:
@@ -312,9 +316,9 @@ def load(target_digits):
     reals_train = X_train[y_train==target_digits[0]]
     fakes_train = X_train[y_train==target_digits[1]]
 
-    trunc = 200 # circa 5500 is the untruncated size. 200 was the sweet spot for wgan-gp.
-    reals_train = reals_train[:trunc]
-    fakes_train = fakes_train[:trunc]
+    # circa 5500 is the untruncated size. 200 seems to be the sweet spot for wgan-gp.
+    reals_train = reals_train[:train_dataset_size]
+    fakes_train = fakes_train[:train_dataset_size]
 
     reals_test  = X_test [y_test ==target_digits[0]]
     fakes_test  = X_test [y_test ==target_digits[1]]
@@ -336,7 +340,8 @@ def generator(data, batch_size, infinity=True):
         if not infinity:
             break
 
-(reals_train, fakes_train), (reals_test, fakes_test) = load(target_digits = (2, 8))
+(reals_train, fakes_train), (reals_test, fakes_test) = load(
+    target_digits = TARGET_DIGITS, train_dataset_size=TRAIN_DATASET_SIZE)
 
 real_gen = generator(reals_train, BATCH_SIZE)
 fake_gen = generator(fakes_train, BATCH_SIZE)
