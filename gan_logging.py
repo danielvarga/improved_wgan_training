@@ -17,6 +17,7 @@ def log_weights_grads(gen_gvs, disc_gvs, params):
                 tf.summary.histogram(var.name + "/gradients", grad)
 
 
+# currently this only works for mnist!
 def log_slopes(BATCH_SIZE, OUTPUT_DIM, ALPHA_COUNT, Generator, Discriminator, fixed_noise_samples):
     alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
     alphas1 = tf.expand_dims(alphas, axis=-1)
@@ -34,7 +35,7 @@ def log_slopes(BATCH_SIZE, OUTPUT_DIM, ALPHA_COUNT, Generator, Discriminator, fi
     grad_by_x = tf.gradients(Discriminator(x), [x])[0]
     slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[2]))
 
-    x2 = tf.random_uniform(x.shape, minval=-1, maxval=1)
+    x2 = tf.random_uniform(x.shape, minval=0, maxval=1)
     grad_by_x2 = tf.gradients(Discriminator(x2), [x2])[0]
     slopes_for_x2 = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x2), reduction_indices=[2]))
     tf.summary.histogram("slopes_at_random", slopes_for_x2)
@@ -50,6 +51,27 @@ def log_slopes(BATCH_SIZE, OUTPUT_DIM, ALPHA_COUNT, Generator, Discriminator, fi
     tf.summary.image("generated", tf.reshape(fixed_noise_samples, (128, 28, 28, 1)), max_outputs=50)
 
     return alphas, real_data_ph, slopes_for_alphas
+
+def log_slopes_small(BATCH_SIZE, OUTPUT_DIM, Generator, Discriminator):
+    real_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, OUTPUT_DIM))
+    fake_data = Generator(BATCH_SIZE)
+    random_images = tf.random_uniform(real_data_ph.shape, minval=0, maxval=1)
+
+    def get_slopes(tensor):
+        out = Discriminator(tensor)
+        grad = tf.gradients(out, tensor)[0]
+        slopes = tf.sqrt(tf.reduce_sum(tf.square(grad), reduction_indices=[1]))
+        return slopes
+
+    
+    slopes_real = get_slopes(real_data_ph)
+    slopes_fake = get_slopes(fake_data)
+    slopes_random = get_slopes(random_images)
+
+    tf.summary.histogram("slopes_at_random", slopes_random)
+    tf.summary.histogram("slopes_for_alpha0", slopes_real)
+    tf.summary.histogram("slopes_for_alpha1", slopes_fake)
+    return real_data_ph
 
 def log_disc_accuracy(disc_real, disc_fake, length):
     combined = tf.concat([disc_real, disc_fake], axis=0)

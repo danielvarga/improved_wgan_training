@@ -304,24 +304,7 @@ with tf.Session() as session:
 
     summary_writer = tf.summary.FileWriter(LOG_DIR, graph=tf.get_default_graph())
 
-    for param_name, param in lib._params.iteritems():
-        print param_name, param
-        tf.summary.histogram(param_name+"/weights", param)
-
-    for grad, var in gen_gvs:
-        if grad is not None:
-            tf.summary.histogram(var.name + "/gradients", grad)
-    for grad, var in disc_gvs:
-        if grad is not None:
-            tf.summary.histogram(var.name + "/gradients", grad)
-
-    """
-    config = projector.ProjectorConfig()
-    embedding = config.embeddings.add()
-    embedding.tensor_name = fixed_noise_samples.name
-    embedding.metadata_path = os.path.join(LOG_DIR, fixed_noise_samples.name)
-    projector.visualize_embeddings(summary_writer, config)
-    """
+    gan_logging.log_weights_grads(None, None, lib._params)
 
     tf.summary.scalar("disc_cost", disc_cost)
 
