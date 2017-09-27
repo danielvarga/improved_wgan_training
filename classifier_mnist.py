@@ -23,11 +23,11 @@ from keras.datasets import mnist
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
-MODE = 'wgan-gp' # dcgan, wgan, or wgan-gp
+MODE = 'wgan-gp-sigmoid' # dcgan, wgan, or wgan-gp, or wgan-gp-sigmoid
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
-LAMBDA = 10 # Gradient penalty lambda hyperparameter
+LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
 ITERS = 1000 # How many generator iterations to train for
 OUTPUT_DIM = 28*28 # Number of pixels in MNIST (28*28)
@@ -175,8 +175,19 @@ if MODE == 'wgan':
     clip_disc_weights = tf.group(*clip_ops)
     weight_loss = tf.constant(0.0)
     
-elif MODE == 'wgan-gp':    
-    disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
+elif MODE.startswith('wgan-gp'):
+    if MODE == 'wgan-gp':
+        disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
+    elif MODE == 'wgan-gp-sigmoid':
+        disc_cost =  tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+            logits=disc_fake,
+            labels=tf.zeros_like(disc_fake)
+        ))
+        disc_cost += tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+            logits=disc_real,
+            labels=tf.ones_like(disc_real)
+        ))
+        disc_cost /= 2.
 
     alpha = tf.random_uniform(
         shape=[BATCH_SIZE,1], 
@@ -215,7 +226,6 @@ elif MODE == 'wgan-gp':
 
     # weight regularization
     if WEIGHT_DECAY_FACTOR > 0:
-
         with tf.variable_scope('weights_norm') as scope:
             weight_loss = tf.reduce_sum(
                 input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
@@ -246,14 +256,27 @@ elif MODE == 'wgan-gp':
 
 elif MODE == 'dcgan':
     disc_cost =  tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-        logits=disc_fake, 
+        logits=disc_fake,
         labels=tf.zeros_like(disc_fake)
     ))
     disc_cost += tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-        logits=disc_real, 
+        logits=disc_real,
         labels=tf.ones_like(disc_real)
     ))
     disc_cost /= 2.
+
+    # weight regularization
+    if WEIGHT_DECAY_FACTOR > 0:
+        with tf.variable_scope('weights_norm') as scope:
+            weight_loss = tf.reduce_sum(
+                input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
+                    [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+                ),
+                name='weight_loss'
+            )
+        disc_cost += weight_loss
+    else:
+        weight_loss = tf.constant(0.0)
 
     HARD_MARGIN_WEIGHT = 0.0
     if HARD_MARGIN_WEIGHT != 0:
@@ -289,12 +312,17 @@ def load(target_digits):
     reals_train = X_train[y_train==target_digits[0]]
     fakes_train = X_train[y_train==target_digits[1]]
 
-    trunc = 500 # circa 5500 is the untruncated size.
+    trunc = 200 # circa 5500 is the untruncated size. 200 was the sweet spot for wgan-gp.
     reals_train = reals_train[:trunc]
     fakes_train = fakes_train[:trunc]
 
     reals_test  = X_test [y_test ==target_digits[0]]
     fakes_test  = X_test [y_test ==target_digits[1]]
+
+    print "TARGET DIGITS", target_digits
+    print "TRAIN DATA SIZE", len(reals_train), len(fakes_train)
+    print "TEST DATA SIZE", len(reals_test), len(fakes_test)
+
     return (reals_train, fakes_train), (reals_test, fakes_test)
 
 def generator(data, batch_size, infinity=True):
@@ -308,7 +336,7 @@ def generator(data, batch_size, infinity=True):
         if not infinity:
             break
 
-(reals_train, fakes_train), (reals_test, fakes_test) = load(target_digits = (5, 8))
+(reals_train, fakes_train), (reals_test, fakes_test) = load(target_digits = (2, 8))
 
 real_gen = generator(reals_train, BATCH_SIZE)
 fake_gen = generator(fakes_train, BATCH_SIZE)
@@ -317,7 +345,7 @@ fake_gen = generator(fakes_train, BATCH_SIZE)
 with tf.Session() as session:
 
     # discriminator is supposed to give big numbers for reals, small numbers for fakes.
-    def accuracy(_disc_real, _disc_fake):
+    def accuracy_ranking(_disc_real, _disc_fake):
         assert len(_disc_real) == len(_disc_fake)
         n = len(_disc_real)
         flags = np.zeros(2*n)
@@ -326,9 +354,13 @@ with tf.Session() as session:
         rearranged = flags[sorter]
         return float(np.sum(rearranged[-n:])) / n
 
+    # discriminator is supposed to give positive numbers for reals, negative numbers for fakes.
+    def accuracy_classification(_disc_real, _disc_fake):
+        return float(np.sum(_disc_real > 0) + np.sum(_disc_fake < 0)) / (len(_disc_real) + len(_disc_fake))
+
     session.run(tf.global_variables_initializer())
 
-    if MODE=='wgan-gp':
+    if MODE.startswith('wgan-gp'):
         if GRADIENT_SHRINKING:
             session_name = "%s-%.2f-%.2f-lambda%.2f-%s" % (MODE, lower_alpha, upper_alpha, LAMBDA, SHRINKING_REDUCTOR)
         else:
@@ -430,7 +462,8 @@ with tf.Session() as session:
             dev_fake_disc_outputs = np.concatenate(dev_fake_disc_outputs)
             # print "REAL", dev_real_disc_outputs[:20], dev_real_disc_outputs.shape
             # print "FAKE", dev_fake_disc_outputs[:20], dev_fake_disc_outputs.shape
-            print "DEVEL ACCURACY", accuracy(dev_real_disc_outputs, dev_fake_disc_outputs)
+            print "DEVEL ACCURACY RANKING", accuracy_ranking(dev_real_disc_outputs, dev_fake_disc_outputs)
+            print "DEVEL ACCURACY CLASSIFICATION", accuracy_classification(dev_real_disc_outputs, dev_fake_disc_outputs)
 
             lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
 
