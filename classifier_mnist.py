@@ -28,7 +28,7 @@ MODE = 'wgan-gp-sigmoid' # dcgan, wgan, or wgan-gp, or wgan-gp-sigmoid
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
-LAMBDA = 10 #1e-2 # Gradient penalty lambda hyperparameter
+LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
 ITERS = 1000 # How many generator iterations to train for
 OUTPUT_DIM = 28*28 # Number of pixels in MNIST (28*28)
@@ -42,7 +42,8 @@ lower_alpha, upper_alpha = 0.0, 1.0
 MULTINOMIAL = True # if true, then we use all digits
 TARGET_DIGITS = 2, 8
 # number of elements in one class, total number is twice this:
-TRAIN_DATASET_SIZE = 200
+TRAIN_DATASET_SIZE = 10000
+TEST_DATASET_SIZE = 10000
 
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
@@ -51,7 +52,9 @@ if not os.path.exists(DIRNAME):
     os.mkdir(DIRNAME)
 
 # this placeholder controls whether we add some noise to the weights of convolutional filters in the discriminator
-WEIGHT_NOISE_SIGMA = tf.placeholder(tf.float32, shape=[])
+WEIGHT_NOISE_SIGMA = tf.placeholder_with_default(tf.constant(0.0), shape=[])
+lambda_tf = tf.placeholder_with_default(tf.constant(LAMBDA), shape=[])
+
 
 # Set lambda to zero at this iteration; set for -1 to disable
 LAMBDA_TO_ZERO_ITER = -1 
@@ -104,19 +107,15 @@ def Classifier_Discriminator(inputs):
     output = tf.reshape(output, [-1, 4*4*4*DIM])
     output = lib.ops.linear.Linear('Discriminator.Output', 4*4*4*DIM, 10, output)
     return output
-#    return tf.reshape(output, [-1])
 
-
-lambda_tf = tf.placeholder(tf.float32, shape=[])
 
 if MULTINOMIAL:
     Discriminator = Classifier_Discriminator
     real_labels = tf.placeholder(tf.uint8, shape=[BATCH_SIZE])
     real_labels2 = tf.one_hot(real_labels, 10)
-else:
-    fake_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
-    disc_fake = Discriminator(fake_data)
 
+fake_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
+disc_fake = Discriminator(fake_data)
 real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
 disc_real = Discriminator(real_data)
 
@@ -345,6 +344,14 @@ if MULTINOMIAL:
     X_train = X_train[:TRAIN_DATASET_SIZE]
     y_train = y_train[:TRAIN_DATASET_SIZE]
     X_test = X_test.reshape(10000, OUTPUT_DIM)
+    X_test = X_test[:TEST_DATASET_SIZE]
+    y_test = y_test[:TEST_DATASET_SIZE]
+
+    X_train = X_train.astype('float32')
+    X_test = X_test.astype('float32')
+    X_train /= 255
+    X_test /= 255
+    
 
     real_gen = classifier_generator((X_train, y_train), BATCH_SIZE)
 else:
@@ -376,15 +383,17 @@ with tf.Session() as session:
 
     session.run(tf.global_variables_initializer())
 
-    if MODE.startswith('wgan-gp'):
-        if GRADIENT_SHRINKING:
-            session_name = "%s-%.2f-%.2f-lambda%.2f-%s" % (MODE, lower_alpha, upper_alpha, LAMBDA, SHRINKING_REDUCTOR)
-        else:
-            session_name = "%s-%.2f-%.2f-lambda%.2f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
-    elif MODE=='wgan':
-        session_name = "%s-batchnorm=%s" % (MODE, DO_BATCHNORM)
-    elif MODE=='dcgan':
-        session_name = "%s" % (MODE)
+    session_name = "classifier-{}-iter{}-multinomial{}-train{}-lambda{}".format(MODE, ITERS, MULTINOMIAL, TRAIN_DATASET_SIZE, LAMBDA)
+
+    # if MODE.startswith('wgan-gp'):
+    #     if GRADIENT_SHRINKING:
+    #         session_name = "%s-%.2f-%.2f-lambda%.2f-%s" % (MODE, lower_alpha, upper_alpha, LAMBDA, SHRINKING_REDUCTOR)
+    #     else:
+    #         session_name = "%s-%.2f-%.2f-lambda%.2f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
+    # elif MODE=='wgan':
+    #     session_name = "%s-batchnorm=%s" % (MODE, DO_BATCHNORM)
+    # elif MODE=='dcgan':
+    #     session_name = "%s" % (MODE)
 
     LOG_DIR = "logs/%s" % session_name
 
@@ -400,36 +409,36 @@ with tf.Session() as session:
 
     tf.summary.scalar("disc_cost", disc_cost)
 
-    # ALPHA_COUNT = 100
+    ALPHA_COUNT = 100
 
-    # alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
-    # alphas1 = tf.expand_dims(alphas, axis=-1)
-    # real_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, OUTPUT_DIM))
-    # real_data_ph1 = tf.expand_dims(real_data_ph, axis=1)
-    # fake_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, OUTPUT_DIM))
-    # fake_data_ph1 = tf.expand_dims(fake_data_ph, axis=1)
+    alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
+    alphas1 = tf.expand_dims(alphas, axis=-1)
+    real_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, OUTPUT_DIM))
+    real_data_ph1 = tf.expand_dims(real_data_ph, axis=1)
+    fake_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, OUTPUT_DIM))
+    fake_data_ph1 = tf.expand_dims(fake_data_ph, axis=1)
 
-    # x = alphas1*fake_data_ph1 + (1-alphas1)*real_data_ph1
+    x = alphas1*fake_data_ph1 + (1-alphas1)*real_data_ph1
 
-    # alpha_to_disc_cost_op = Discriminator(x)
+    alpha_to_disc_cost_op = Discriminator(x)
 
-    # grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)[0]
+    grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)[0]
 
-    # grad_by_x = tf.gradients(Discriminator(x), [x])[0]
-    # slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[2]))
+    grad_by_x = tf.gradients(Discriminator(x), [x])[0]
+    slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[2]))
 
-    # x2 = tf.random_uniform(x.shape, minval=-1, maxval=1)
-    # grad_by_x2 = tf.gradients(Discriminator(x2), [x2])[0]
-    # slopes_for_x2 = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x2), reduction_indices=[2]))
-    # tf.summary.histogram("slopes_at_random", slopes_for_x2)
+    x2 = tf.random_uniform(x.shape, minval=-1, maxval=1)
+    grad_by_x2 = tf.gradients(Discriminator(x2), [x2])[0]
+    slopes_for_x2 = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x2), reduction_indices=[2]))
+    tf.summary.histogram("slopes_at_random", slopes_for_x2)
     
-    # # tf.summary.histogram("slopes_for_all_alphas", slopes_for_alphas)
-    # tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
-    # tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
+    # tf.summary.histogram("slopes_for_all_alphas", slopes_for_alphas)
+    tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
+    tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
 
-    # tf.summary.histogram("unidirectional_grad_at_all_alphas", grad_by_alphas)
-    # tf.summary.histogram("unidirectional_grad_at_alpha0", grad_by_alphas[:, 0])
-    # tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
+    tf.summary.histogram("unidirectional_grad_at_all_alphas", grad_by_alphas)
+    tf.summary.histogram("unidirectional_grad_at_alpha0", grad_by_alphas[:, 0])
+    tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
 
     merged_summary_op = tf.summary.merge_all()
 
@@ -439,16 +448,16 @@ with tf.Session() as session:
         for i in xrange(CRITIC_ITERS):
             _real_data = real_gen.next()
 
-            if MULTINOMIAL: 
+            if MULTINOMIAL:
                 _weight_loss, _disc_cost, _,  _disc_real = session.run(
                     [weight_loss, disc_cost, disc_train_op, disc_real],
-                    feed_dict={real_data: _real_data[0], real_labels: _real_data[1], lambda_tf: LAMBDA, WEIGHT_NOISE_SIGMA:0.0}
+                    feed_dict={real_data: _real_data[0], fake_data: np.random.permutation(_real_data[0]), real_labels: _real_data[1]}
                 )
             else:
                 _fake_data = fake_gen.next()
                 _weight_loss, _disc_cost, _, _disc_real, _disc_fake = session.run(
                     [weight_loss, disc_cost, disc_train_op, disc_real, disc_fake],
-                    feed_dict={real_data: _real_data, fake_data: _fake_data, lambda_tf: LAMBDA, WEIGHT_NOISE_SIGMA:0.0}
+                    feed_dict={real_data: _real_data, fake_data: _fake_data}
                 )
 
             if clip_disc_weights is not None:
@@ -465,7 +474,7 @@ with tf.Session() as session:
         lib.plot.plot('train weight loss', _weight_loss)
         lib.plot.plot('time', time.time() - start_time)
 
-        # alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
+        alpha_grid = np.tile(np.linspace(0, 1, ALPHA_COUNT), (BATCH_SIZE, 1))
 
         # Calculate dev loss and generate samples every 100 iters
         if iteration < 5 or iteration % 100 == 0:
@@ -478,7 +487,7 @@ with tf.Session() as session:
                 for _real_data_test in classifier_generator((X_test, y_test), BATCH_SIZE, infinity=False):
                     _dev_disc_cost, _dev_real_disc_output = session.run(
                         [disc_cost, disc_real],
-                        feed_dict={real_data: _real_data_test[0], real_labels: _real_data_test[1], lambda_tf: LAMBDA, WEIGHT_NOISE_SIGMA:0.0}
+                        feed_dict={real_data: _real_data_test[0], fake_data: np.random.permutation(_real_data_test[0]), real_labels: _real_data_test[1]}
                     )
                     dev_disc_costs.append(_dev_disc_cost)
                     dev_real_disc_outputs.append(_dev_real_disc_output)
@@ -490,7 +499,7 @@ with tf.Session() as session:
                 ):
                     _dev_disc_cost, _dev_real_disc_output, _dev_fake_disc_output = session.run(
                         [disc_cost, disc_real, disc_fake],
-                        feed_dict={real_data: _real_data_test, fake_data: _fake_data_test, lambda_tf: LAMBDA, WEIGHT_NOISE_SIGMA:0.0}
+                        feed_dict={real_data: _real_data_test, fake_data: _fake_data_test}
                     )
                     dev_disc_costs.append(_dev_disc_cost)
                     dev_real_disc_outputs.append(_dev_real_disc_output)
@@ -515,9 +524,7 @@ with tf.Session() as session:
 #             _slopes_for_alphas = session.run([slopes_for_alphas],
 #                                             feed_dict={alphas:alpha_grid,
 #                                                        real_data_ph: _real_data_test,
-#                                                        fake_data_ph: _fake_data_test,
-#                                                        lambda_tf: LAMBDA,
-#                                                        WEIGHT_NOISE_SIGMA:0.0
+#                                                        fake_data_ph: _fake_data_test
 #                                             }
 #             )
 #             _slopes_for_alphas = _slopes_for_alphas[0]
@@ -525,7 +532,6 @@ with tf.Session() as session:
 #                                             feed_dict={alphas:alpha_grid,
 #                                                        real_data_ph: _real_data_test,
 #                                                        fake_data_ph: _fake_data_test,
-#                                                        lambda_tf: LAMBDA,
 #                                                        WEIGHT_NOISE_SIGMA:0.01
 #                                             }
 #             )
@@ -538,23 +544,24 @@ with tf.Session() as session:
                 saver.save(session, os.path.join(LOG_DIR, "model.ckpt"), iteration)
 
             if MULTINOMIAL:
+                _fake_data = np.random.permutation(_real_data_test[0])
                 summary = session.run([merged_summary_op],
                                       feed_dict={
                                           real_data: _real_data_test[0],
+                                          fake_data: _fake_data,
                                           real_labels: _real_data_test[1],
-                                          lambda_tf: LAMBDA,
-                                          WEIGHT_NOISE_SIGMA:0.0
+                                          real_data_ph: _real_data_test[0],
+                                          fake_data_ph: _fake_data,
+                                          alphas: alpha_grid
                                       })
             else:
                 summary = session.run([merged_summary_op],
                                       feed_dict={
                                           real_data: _real_data_test,
                                           fake_data: _fake_data_test,
-#                                          real_data_ph: _real_data_test,
-#                                          fake_data_ph: _fake_data_test,
-#                                          alphas: alpha_grid,
-                                          lambda_tf: LAMBDA,
-                                          WEIGHT_NOISE_SIGMA:0.0
+                                          real_data_ph: _real_data_test,
+                                          fake_data_ph: _fake_data_test,
+                                          alphas: alpha_grid
                                       })
             summary_writer.add_summary(summary[0], iteration)
 
