@@ -19,20 +19,19 @@ import tflib.save_images
 import tflib.mnist
 import tflib.plot
 
-from keras.datasets import mnist
 
 from tensorflow.contrib.tensorboard.plugins import projector
 import util
 import losses
+import data
 
 MODE = 'wgan-gp-sigmoid' # dcgan, wgan, or wgan-gp, or wgan-gp-sigmoid
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
-LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
+LAMBDA = 0.0 #1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
 ITERS = 1000 # How many generator iterations to train for
-OUTPUT_DIM = 28*28 # Number of pixels in MNIST (28*28)
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
 USE_DENSE_DISCRIMINIATOR = False
@@ -43,10 +42,19 @@ ALPHA_STRATEGY = "uniform"
 MULTINOMIAL = True # if true, then we use all digits
 TARGET_DIGITS = 2, 8
 # number of elements in one class, total number is twice this:
-TRAIN_DATASET_SIZE = 200
+TRAIN_DATASET_SIZE = 2000
 TEST_DATASET_SIZE = 10000
 BALANCED = False # if BALANCED and MULTINOMIAL then  we take TRAIN_DATASET_SIZE items from each digit class
 COMBINE_OUTPUTS_FOR_SLOPES = True # if MULTINOMIAL and COMBINE_OUTPUTS_FOR_SLOPES then we take a fixed random linear combination of the softmax logits and calculate slopes on them
+DATASET="cifar10" # cifar10 / mnist
+
+if DATASET == "mnist":
+    OUTPUT_SHAPE = (1, 28, 28)
+elif DATASET == "cifar10":
+    OUTPUT_SHAPE = (3, 28, 28)
+CHANNEL = OUTPUT_SHAPE[0]
+OUTPUT_DIM = np.prod(OUTPUT_SHAPE)
+
 
 if not MULTINOMIAL:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE * 2
@@ -63,6 +71,20 @@ if DO_BATCHNORM:
 DIRNAME="pictures"
 if not os.path.exists(DIRNAME):
     os.mkdir(DIRNAME)
+
+# load data
+if MULTINOMIAL:
+    if BALANCED:
+        (X_train, y_train), (X_test, y_test) = data.load_balanced(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
+    else:
+        (X_train, y_train), (X_test, y_test) = data.load_set(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
+    real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE)
+else:
+    (reals_train, fakes_train), (reals_test, fakes_test) = data.load_pairs(
+        target_digits = TARGET_DIGITS, train_dataset_size=TRAIN_DATASET_SIZE)
+    real_gen = data.generator(reals_train, BATCH_SIZE)
+    fake_gen = data.generator(fakes_train, BATCH_SIZE)
+
 
 # this placeholder controls whether we add some noise to the weights of convolutional filters in the discriminator
 WEIGHT_NOISE_SIGMA = tf.placeholder_with_default(tf.constant(0.0), shape=[])
@@ -81,9 +103,9 @@ def LeakyReLU(x, alpha=0.2):
 
 
 def Discriminator(inputs):
-    output = tf.reshape(inputs, [-1, 1, 28, 28])
+    output = tf.reshape(inputs, [-1] + list(OUTPUT_SHAPE))
 
-    output = lib.ops.conv2d.Conv2D('Discriminator.1',1,DIM,5,output,stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+    output = lib.ops.conv2d.Conv2D('Discriminator.1',CHANNEL,DIM,5,output,stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
     output = LeakyReLU(output)
 
     output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
@@ -102,9 +124,9 @@ def Discriminator(inputs):
     return tf.reshape(output, [-1])
 
 def Classifier_Discriminator(inputs):
-    output = tf.reshape(inputs, [-1, 1, 28, 28])
+    output = tf.reshape(inputs, [-1] + list(OUTPUT_SHAPE))
 
-    output = lib.ops.conv2d.Conv2D('Discriminator.1',1,DIM,5,output,stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+    output = lib.ops.conv2d.Conv2D('Discriminator.1',CHANNEL,DIM,5,output,stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
     output = LeakyReLU(output)
 
     output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
@@ -141,6 +163,21 @@ disc_filters = [param for param_name, param in lib._params.iteritems() if param_
 
 def activation_to_loss(activation):
     return tf.reduce_mean(tf.maximum(0.0,tf.square(activation) - 1.0))
+
+def get_slopes(input, slope_by):
+    output = Discriminator(input)
+    if MULTINOMIAL:
+        if COMBINE_OUTPUTS_FOR_SLOPES:
+            output_weights = tf.random_normal((10,))
+            gradients = tf.gradients(output * output_weights, [slope_by])[0]
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+        else:
+            jacobians = util.jacobian_by_batch(output, slope_by)
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[3]))
+    else:
+        gradients = tf.gradients(output, [slope_by])[0]
+        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+    return slopes
 
 if MODE == 'wgan':
     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
@@ -188,18 +225,7 @@ elif MODE.startswith('wgan-gp'):
             disc_cost /= 2.
 
     interpolates = losses.get_slope_samples(real_data, fake_data, ALPHA_STRATEGY, BATCH_SIZE)
-    if MULTINOMIAL:
-        outputs = Discriminator(interpolates)
-        if COMBINE_OUTPUTS_FOR_SLOPES:
-            output_weights = tf.random_normal((10,))
-            gradients = tf.gradients(outputs * output_weights, [interpolates])[0]
-            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-        else:
-            jacobians = util.jacobian_by_batch(Discriminator(interpolates), interpolates)
-            slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[3]))
-    else:
-        gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+    slopes = get_slopes(interpolates, interpolates)
     
     if GRADIENT_SHRINKING:
         print "gradient shrinking"
@@ -295,113 +321,6 @@ elif MODE == 'dcgan':
     clip_disc_weights = None
     weight_loss = tf.constant(0.0)
 
-# Dataset iterator
-
-def load_mnist_pairs(target_digits, train_dataset_size):
-    (X_train, y_train), (X_test, y_test) = mnist.load_data()
-
-    # flatten the 28x28 images to arrays of length 28*28:
-    X_train = X_train.reshape(60000, OUTPUT_DIM)
-    X_test = X_test.reshape(10000, OUTPUT_DIM)
-
-    # convert brightness values from bytes to floats between 0 and 1:
-    X_train = X_train.astype('float32')
-    X_test = X_test.astype('float32')
-    X_train /= 255
-    X_test /= 255
-    reals_train = X_train[y_train==target_digits[0]]
-    fakes_train = X_train[y_train==target_digits[1]]
-
-    # circa 5500 is the untruncated size. 200 seems to be the sweet spot for wgan-gp.
-    reals_train = reals_train[:train_dataset_size]
-    fakes_train = fakes_train[:train_dataset_size]
-
-    reals_test  = X_test [y_test ==target_digits[0]]
-    fakes_test  = X_test [y_test ==target_digits[1]]
-
-    print "TARGET DIGITS", target_digits
-    print "TRAIN DATA SIZE", len(reals_train), len(fakes_train)
-    print "TEST DATA SIZE", len(reals_test), len(fakes_test)
-
-    return (reals_train, fakes_train), (reals_test, fakes_test)
-
-def load_mnist_set(TRAIN_DATASET_SIZE, TEST_DATASET_SIZE):
-    (X_train, y_train), (X_test, y_test) = mnist.load_data()
-    X_train = X_train.reshape(60000, OUTPUT_DIM)
-    X_train = X_train[:TRAIN_DATASET_SIZE]
-    y_train = y_train[:TRAIN_DATASET_SIZE]
-    X_test = X_test.reshape(10000, OUTPUT_DIM)
-    X_test = X_test[:TEST_DATASET_SIZE]
-    y_test = y_test[:TEST_DATASET_SIZE]
-
-    X_train = X_train.astype('float32')
-    X_test = X_test.astype('float32')
-    X_train /= 255
-    X_test /= 255
-    return (X_train, y_train), (X_test, y_test)
-
-
-def load_mnist_balanced(size_per_digit, TEST_DATASET_SIZE):
-    (X_train, y_train), (X_test, y_test) = mnist.load_data()
-    # flatten the 28x28 images to arrays of length 28*28:
-    X_train = X_train.reshape(60000, OUTPUT_DIM)
-
-    X_train_selected = []
-    y_train_selected = []
-    for digit in range(10):
-        xs = X_train[y_train==digit]
-        ys = y_train[y_train==digit]
-        X_train_selected.append(xs[:size_per_digit])
-        y_train_selected.append(ys[:size_per_digit])
-    X_train = np.concatenate(X_train_selected)
-    y_train = np.concatenate(y_train_selected)
-
-    X_test = X_test.reshape(10000, OUTPUT_DIM)
-    X_test = X_test[:TEST_DATASET_SIZE]
-    y_test = y_test[:TEST_DATASET_SIZE]
-
-    X_train = X_train.astype('float32')
-    X_test = X_test.astype('float32')
-    X_train /= 255
-    X_test /= 255
-    return (X_train, y_train), (X_test, y_test)
-
-
-
-def generator(data, batch_size, infinity=True):
-    d = data.copy()
-    while True:
-        np.random.shuffle(d)
-        i = 0
-        while (i+1) * batch_size <= len(d):
-            yield d[i * batch_size : (i+1) * batch_size]
-            i += 1
-        if not infinity:
-            break
-
-def classifier_generator((xs, ys), batch_size, infinity=True):
-    while True:
-        perm = np.random.permutation(len(xs))
-        xs2 = xs[perm]
-        ys2 = ys[perm]
-        i = 0
-        while (i+1) * batch_size <= len(xs2):
-            yield (xs2[i * batch_size : (i+1) * batch_size], ys2[i * batch_size : (i+1) * batch_size])
-            i += 1
-        if not infinity:
-            break
-
-if MULTINOMIAL:
-    if BALANCED:
-        (X_train, y_train), (X_test, y_test) = load_mnist_balanced(TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
-    else:
-        (X_train, y_train), (X_test, y_test) = load_mnist_set(TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
-    real_gen = classifier_generator((X_train, y_train), BATCH_SIZE)
-else:
-    (reals_train, fakes_train), (reals_test, fakes_test) = load_mnist_pairs(
-        target_digits = TARGET_DIGITS, train_dataset_size=TRAIN_DATASET_SIZE)
-    real_gen = generator(reals_train, BATCH_SIZE)
-    fake_gen = generator(fakes_train, BATCH_SIZE)
 
 # Train loop
 with tf.Session() as session:
@@ -444,32 +363,33 @@ with tf.Session() as session:
 
     alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
     alphas1 = tf.expand_dims(alphas, axis=-1)
-    real_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, OUTPUT_DIM))
+    real_data_ph = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
     real_data_ph1 = tf.expand_dims(real_data_ph, axis=1)
-    fake_data_ph = tf.placeholder(tf.float32, shape=(BATCH_SIZE, OUTPUT_DIM))
+    fake_data_ph = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
     fake_data_ph1 = tf.expand_dims(fake_data_ph, axis=1)
 
-    x = alphas1*fake_data_ph1 + (1-alphas1)*real_data_ph1
+    # x = alphas1*fake_data_ph1 + (1-alphas1)*real_data_ph1
+    # slopes_for_alphas = get_slopes(x, alphas)
 
-    alpha_to_disc_cost_op = Discriminator(x)
+    # # grad_by_alphas = tf.gradients(Discriminator(x), alphas)[0]
 
-    grad_by_alphas = tf.gradients(alpha_to_disc_cost_op, alphas)[0]
+    # # grad_by_x = tf.gradients(Discriminator(x), [x])[0]
+    # # slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[2]))
 
-    grad_by_x = tf.gradients(Discriminator(x), [x])[0]
-    slopes_for_alphas = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x), reduction_indices=[2]))
+    # x2 = tf.random_uniform(x.shape, minval=-1, maxval=1)
+    # slopes_for_x2 = get_slopes(x2, x2)
 
-    x2 = tf.random_uniform(x.shape, minval=-1, maxval=1)
-    grad_by_x2 = tf.gradients(Discriminator(x2), [x2])[0]
-    slopes_for_x2 = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x2), reduction_indices=[2]))
-    tf.summary.histogram("slopes_at_random", slopes_for_x2)
+    # # grad_by_x2 = tf.gradients(Discriminator(x2), [x2])[0]
+    # # slopes_for_x2 = tf.sqrt(tf.reduce_sum(tf.square(grad_by_x2), reduction_indices=[2]))
+
+    # slopes_for_x2 = tf.reshape(slopes_for_x2, [BATCH_SIZE, ALPHA_COUNT, -1])
+    # slopes_for_alphas = tf.reshape(slopes_for_alphas, [BATCH_SIZE, ALPHA_COUNT, -1])
+
+    # tf.summary.histogram("slopes_at_random", slopes_for_x2)
     
-    # tf.summary.histogram("slopes_for_all_alphas", slopes_for_alphas)
-    tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
-    tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
-
-    tf.summary.histogram("unidirectional_grad_at_all_alphas", grad_by_alphas)
-    tf.summary.histogram("unidirectional_grad_at_alpha0", grad_by_alphas[:, 0])
-    tf.summary.histogram("unidirectional_grad_at_alpha1", grad_by_alphas[:, -1])
+    # # tf.summary.histogram("slopes_for_all_alphas", slopes_for_alphas)
+    # tf.summary.histogram("slopes_for_alpha0", slopes_for_alphas[:, 0])
+    # tf.summary.histogram("slopes_for_alpha1", slopes_for_alphas[:, -1])
 
     merged_summary_op = tf.summary.merge_all()
 
@@ -515,7 +435,7 @@ with tf.Session() as session:
             dev_real_labels = []
 
             if MULTINOMIAL:
-                for _real_data_test in classifier_generator((X_test, y_test), BATCH_SIZE, infinity=False):
+                for _real_data_test in data.classifier_generator((X_test, y_test), BATCH_SIZE, infinity=False):
                     _dev_disc_cost, _dev_real_disc_output = session.run(
                         [disc_cost, disc_real],
                         feed_dict={real_data: _real_data_test[0], fake_data: np.random.permutation(_real_data_test[0]), real_labels: _real_data_test[1]}
@@ -525,8 +445,8 @@ with tf.Session() as session:
                     dev_real_labels.append(_real_data_test[1])
             else:
                 for _real_data_test, _fake_data_test in zip(
-                        generator(reals_test, BATCH_SIZE, infinity=False),
-                        generator(fakes_test, BATCH_SIZE, infinity=False)
+                        data.generator(reals_test, BATCH_SIZE, infinity=False),
+                        data.generator(fakes_test, BATCH_SIZE, infinity=False)
                 ):
                     _dev_disc_cost, _dev_real_disc_output, _dev_fake_disc_output = session.run(
                         [disc_cost, disc_real, disc_fake],
