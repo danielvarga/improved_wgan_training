@@ -16,24 +16,7 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                 disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
                 print "alpha_strategy", alpha_strategy
-
-                if alpha_strategy == "uniform":
-                    # Original WGAN-GP interpolation:
-                    alpha = tf.random_uniform(
-                        shape=[SUB_BATCH_SIZE,1], 
-                        minval=0.,
-                        maxval=1.
-                    )
-                elif alpha_strategy == "bernoulli":
-                    alpha = tf.where(alpha < 0.5, tf.ones([SUB_BATCH_SIZE,1]), tf.zeros([SUB_BATCH_SIZE, 1]))
-                elif alpha_strategy == "fake":
-                    # Straight GP1:
-                    alpha = tf.ones([SUB_BATCH_SIZE,1])
-                elif alpha_strategy == "real":
-                    alpha = tf.zeros([SUB_BATCH_SIZE,1])
-
-                differences = fake_data - real_data
-                interpolates = real_data + (alpha*differences)
+                interpolates = get_slope_samples(real_data, fake_data, alpha_strategy, SUB_BATCH_SIZE)
                 
                 if remember_last_activation:
                             gradients = tf.gradients(Discriminator(interpolates, remember_last_activation=remember_last_activation), [interpolates])[0]
@@ -72,3 +55,25 @@ def calculate_losses(SUB_BATCH_SIZE, real_data, Generator, Discriminator, MODE, 
                         disc_cost += util.get_weight_loss(params_for_wd, WEIGHT_DECAY)
 
             return gen_cost, disc_cost, initial_slopes, final_slopes, gradient_penalty
+
+def get_slope_samples(real_data, fake_data, alpha_strategy, SUB_BATCH_SIZE):
+            if alpha_strategy == "uniform":
+                        # Original WGAN-GP interpolation:
+                        alpha = tf.random_uniform(
+                                    shape=[SUB_BATCH_SIZE,1], 
+                                    minval=0.,
+                                    maxval=1.
+                        )
+            elif alpha_strategy == "bernoulli":
+                        alpha = tf.where(alpha < 0.5, tf.ones([SUB_BATCH_SIZE,1]), tf.zeros([SUB_BATCH_SIZE, 1]))
+            elif alpha_strategy == "fake":
+                        # Straight GP1:
+                        alpha = tf.ones([SUB_BATCH_SIZE,1])
+            elif alpha_strategy == "real":
+                        alpha = tf.zeros([SUB_BATCH_SIZE,1])
+            elif alpha_strategy == "random":
+                        return tf.random_uniform(shape=fake_data.shape, minval=0.0, maxval=1.0)
+
+            differences = fake_data - real_data
+            interpolates = real_data + (alpha*differences)
+            return interpolates

@@ -23,6 +23,7 @@ from keras.datasets import mnist
 
 from tensorflow.contrib.tensorboard.plugins import projector
 import util
+import losses
 
 MODE = 'wgan-gp-sigmoid' # dcgan, wgan, or wgan-gp, or wgan-gp-sigmoid
 DIM = 64 # Model dimensionality
@@ -37,13 +38,25 @@ ACTIVATION_PENALTY = 0.0
 USE_DENSE_DISCRIMINIATOR = False
 GRADIENT_SHRINKING = False
 SHRINKING_REDUCTOR = "mean" # "none", "max", "mean", "softmax"
-lower_alpha, upper_alpha = 0.0, 1.0
+ALPHA_STRATEGY = "uniform"
 
 MULTINOMIAL = True # if true, then we use all digits
 TARGET_DIGITS = 2, 8
 # number of elements in one class, total number is twice this:
-TRAIN_DATASET_SIZE = 10000
+TRAIN_DATASET_SIZE = 200
 TEST_DATASET_SIZE = 10000
+BALANCED = False # if BALANCED and MULTINOMIAL then  we take TRAIN_DATASET_SIZE items from each digit class
+COMBINE_OUTPUTS_FOR_SLOPES = True # if MULTINOMIAL and COMBINE_OUTPUTS_FOR_SLOPES then we take a fixed random linear combination of the softmax logits and calculate slopes on them
+
+if not MULTINOMIAL:
+    TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE * 2
+else:
+    if BALANCED:
+        TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE * 10
+    else:
+        TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
+
+SESSION_NAME = "classifier-{}-iter{}-multinomial{}-train{}-lambda{}-{}".format(MODE, ITERS, MULTINOMIAL, TOTAL_TRAIN_SIZE, LAMBDA, ALPHA_STRATEGY)
 
 if DO_BATCHNORM:
     assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
@@ -174,19 +187,17 @@ elif MODE.startswith('wgan-gp'):
             ))
             disc_cost /= 2.
 
-    alpha = tf.random_uniform(
-        shape=[BATCH_SIZE,1], 
-        minval=lower_alpha,
-        maxval=upper_alpha
-    )
-
-    if MULTINOMIAL: # TODO where should we compute the slopes?
-        jacobians = util.jacobian_by_batch(disc_real, real_data)
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[3]))
-        # slopes = tf.reduce_mean(slopes) # TODO this takes the average of slopes
+    interpolates = losses.get_slope_samples(real_data, fake_data, ALPHA_STRATEGY, BATCH_SIZE)
+    if MULTINOMIAL:
+        outputs = Discriminator(interpolates)
+        if COMBINE_OUTPUTS_FOR_SLOPES:
+            output_weights = tf.random_normal((10,))
+            gradients = tf.gradients(outputs * output_weights, [interpolates])[0]
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+        else:
+            jacobians = util.jacobian_by_batch(Discriminator(interpolates), interpolates)
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[3]))
     else:
-        differences = fake_data - real_data
-        interpolates = real_data + (alpha*differences)
         gradients = tf.gradients(Discriminator(interpolates), [interpolates])[0]
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     
@@ -286,7 +297,7 @@ elif MODE == 'dcgan':
 
 # Dataset iterator
 
-def load(target_digits, train_dataset_size):
+def load_mnist_pairs(target_digits, train_dataset_size):
     (X_train, y_train), (X_test, y_test) = mnist.load_data()
 
     # flatten the 28x28 images to arrays of length 28*28:
@@ -314,6 +325,49 @@ def load(target_digits, train_dataset_size):
 
     return (reals_train, fakes_train), (reals_test, fakes_test)
 
+def load_mnist_set(TRAIN_DATASET_SIZE, TEST_DATASET_SIZE):
+    (X_train, y_train), (X_test, y_test) = mnist.load_data()
+    X_train = X_train.reshape(60000, OUTPUT_DIM)
+    X_train = X_train[:TRAIN_DATASET_SIZE]
+    y_train = y_train[:TRAIN_DATASET_SIZE]
+    X_test = X_test.reshape(10000, OUTPUT_DIM)
+    X_test = X_test[:TEST_DATASET_SIZE]
+    y_test = y_test[:TEST_DATASET_SIZE]
+
+    X_train = X_train.astype('float32')
+    X_test = X_test.astype('float32')
+    X_train /= 255
+    X_test /= 255
+    return (X_train, y_train), (X_test, y_test)
+
+
+def load_mnist_balanced(size_per_digit, TEST_DATASET_SIZE):
+    (X_train, y_train), (X_test, y_test) = mnist.load_data()
+    # flatten the 28x28 images to arrays of length 28*28:
+    X_train = X_train.reshape(60000, OUTPUT_DIM)
+
+    X_train_selected = []
+    y_train_selected = []
+    for digit in range(10):
+        xs = X_train[y_train==digit]
+        ys = y_train[y_train==digit]
+        X_train_selected.append(xs[:size_per_digit])
+        y_train_selected.append(ys[:size_per_digit])
+    X_train = np.concatenate(X_train_selected)
+    y_train = np.concatenate(y_train_selected)
+
+    X_test = X_test.reshape(10000, OUTPUT_DIM)
+    X_test = X_test[:TEST_DATASET_SIZE]
+    y_test = y_test[:TEST_DATASET_SIZE]
+
+    X_train = X_train.astype('float32')
+    X_test = X_test.astype('float32')
+    X_train /= 255
+    X_test /= 255
+    return (X_train, y_train), (X_test, y_test)
+
+
+
 def generator(data, batch_size, infinity=True):
     d = data.copy()
     while True:
@@ -337,25 +391,14 @@ def classifier_generator((xs, ys), batch_size, infinity=True):
         if not infinity:
             break
 
-if MULTINOMIAL: 
-    (X_train, y_train), (X_test, y_test) = mnist.load_data()
-    # flatten the 28x28 images to arrays of length 28*28:
-    X_train = X_train.reshape(60000, OUTPUT_DIM)
-    X_train = X_train[:TRAIN_DATASET_SIZE]
-    y_train = y_train[:TRAIN_DATASET_SIZE]
-    X_test = X_test.reshape(10000, OUTPUT_DIM)
-    X_test = X_test[:TEST_DATASET_SIZE]
-    y_test = y_test[:TEST_DATASET_SIZE]
-
-    X_train = X_train.astype('float32')
-    X_test = X_test.astype('float32')
-    X_train /= 255
-    X_test /= 255
-    
-
+if MULTINOMIAL:
+    if BALANCED:
+        (X_train, y_train), (X_test, y_test) = load_mnist_balanced(TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
+    else:
+        (X_train, y_train), (X_test, y_test) = load_mnist_set(TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
     real_gen = classifier_generator((X_train, y_train), BATCH_SIZE)
 else:
-    (reals_train, fakes_train), (reals_test, fakes_test) = load(
+    (reals_train, fakes_train), (reals_test, fakes_test) = load_mnist_pairs(
         target_digits = TARGET_DIGITS, train_dataset_size=TRAIN_DATASET_SIZE)
     real_gen = generator(reals_train, BATCH_SIZE)
     fake_gen = generator(fakes_train, BATCH_SIZE)
@@ -383,19 +426,7 @@ with tf.Session() as session:
 
     session.run(tf.global_variables_initializer())
 
-    session_name = "classifier-{}-iter{}-multinomial{}-train{}-lambda{}".format(MODE, ITERS, MULTINOMIAL, TRAIN_DATASET_SIZE, LAMBDA)
-
-    # if MODE.startswith('wgan-gp'):
-    #     if GRADIENT_SHRINKING:
-    #         session_name = "%s-%.2f-%.2f-lambda%.2f-%s" % (MODE, lower_alpha, upper_alpha, LAMBDA, SHRINKING_REDUCTOR)
-    #     else:
-    #         session_name = "%s-%.2f-%.2f-lambda%.2f" % (MODE, lower_alpha, upper_alpha, LAMBDA)
-    # elif MODE=='wgan':
-    #     session_name = "%s-batchnorm=%s" % (MODE, DO_BATCHNORM)
-    # elif MODE=='dcgan':
-    #     session_name = "%s" % (MODE)
-
-    LOG_DIR = "logs/%s" % session_name
+    LOG_DIR = "logs/%s" % SESSION_NAME
 
     summary_writer = tf.summary.FileWriter(LOG_DIR, graph=tf.get_default_graph())
 
