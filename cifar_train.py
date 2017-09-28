@@ -102,10 +102,9 @@ def residual_drop(x, input_shape, output_shape, strides=(1, 1)):
                    output_shape=(output_shape[1], output_shape[2], output_shape[0]))(x)
     _death_rate = K.variable(death_rate)
     scale = K.ones_like(conv) - _death_rate
-    """
+
     conv = Lambda(lambda c: K.in_test_phase(scale * c, c),
                   output_shape=(output_shape[1], output_shape[2], output_shape[0]))(conv)
-    """
 
     out = merge([conv, x], mode="sum")
     out = Activation("relu")(out)
