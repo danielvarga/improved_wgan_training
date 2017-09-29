@@ -9,8 +9,8 @@ def load_raw_data(dataset):
 
     elif dataset == "cifar10":
         (X_train, y_train), (X_test, y_test) = cifar10.load_data()
-        X_train = X_train[:,2:30,2:30]
-        X_test = X_test[:,2:30,2:30]
+        # X_train = X_train[:,2:30,2:30]
+        # X_test = X_test[:,2:30,2:30]
         X_train = np.transpose(X_train, axes=(0,3,1,2))
         X_test = np.transpose(X_test, axes=(0,3,1,2))
         y_train = np.squeeze(y_train)

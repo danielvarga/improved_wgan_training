@@ -24,17 +24,17 @@ from tensorflow.contrib.tensorboard.plugins import projector
 import util
 import losses
 import data
+import networks
 
 MODE = 'wgan-gp-sigmoid' # dcgan, wgan, or wgan-gp, or wgan-gp-sigmoid
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 CRITIC_ITERS = 5 # For WGAN and WGAN-GP, number of critic iters per gen iter
-LAMBDA = 0.0 #1e-4 # Gradient penalty lambda hyperparameter
+LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
-ITERS = 1000 # How many generator iterations to train for
+ITERS = 2000 # How many generator iterations to train for
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
-USE_DENSE_DISCRIMINIATOR = False
 GRADIENT_SHRINKING = False
 SHRINKING_REDUCTOR = "mean" # "none", "max", "mean", "softmax"
 ALPHA_STRATEGY = "uniform"
@@ -47,13 +47,17 @@ TEST_DATASET_SIZE = 10000
 BALANCED = False # if BALANCED and MULTINOMIAL then  we take TRAIN_DATASET_SIZE items from each digit class
 COMBINE_OUTPUTS_FOR_SLOPES = True # if MULTINOMIAL and COMBINE_OUTPUTS_FOR_SLOPES then we take a fixed random linear combination of the softmax logits and calculate slopes on them
 DATASET="cifar10" # cifar10 / mnist
+DISC_TYPE = "resnet" # "conv" / "resnet"
 
 if DATASET == "mnist":
-    OUTPUT_SHAPE = (1, 28, 28)
+    INPUT_SHAPE = (1, 28, 28)
+    OUTPUT_COUNT = 10
 elif DATASET == "cifar10":
-    OUTPUT_SHAPE = (3, 28, 28)
-CHANNEL = OUTPUT_SHAPE[0]
-OUTPUT_DIM = np.prod(OUTPUT_SHAPE)
+    INPUT_SHAPE = (3, 32, 32)
+    OUTPUT_COUNT = 10
+INPUT_DIM = np.prod(INPUT_SHAPE)
+if not MULTINOMIAL:
+    OUTPUT_COUNT = 1
 
 
 if not MULTINOMIAL:
@@ -65,9 +69,6 @@ else:
         TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
 SESSION_NAME = "classifier-{}-iter{}-multinomial{}-train{}-lambda{}-{}".format(MODE, ITERS, MULTINOMIAL, TOTAL_TRAIN_SIZE, LAMBDA, ALPHA_STRATEGY)
-
-if DO_BATCHNORM:
-    assert MODE=='wgan', "please don't use batchnorm for modes other than wgan, we don't know what would happen"
 DIRNAME="pictures"
 if not os.path.exists(DIRNAME):
     os.mkdir(DIRNAME)
@@ -98,60 +99,17 @@ if len(sys.argv) == 2:
 
 lib.print_model_settings(locals().copy())
 
-def LeakyReLU(x, alpha=0.2):
-    return tf.maximum(alpha*x, x)
 
-
-def Discriminator(inputs):
-    output = tf.reshape(inputs, [-1] + list(OUTPUT_SHAPE))
-
-    output = lib.ops.conv2d.Conv2D('Discriminator.1',CHANNEL,DIM,5,output,stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
-    output = LeakyReLU(output)
-
-    output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
-    if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN2', [0,2,3], output)
-    output = LeakyReLU(output)
-
-    output = lib.ops.conv2d.Conv2D('Discriminator.3', 2*DIM, 4*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
-    if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN3', [0,2,3], output)
-    output = LeakyReLU(output)
-
-    output = tf.reshape(output, [-1, 4*4*4*DIM])
-    output = lib.ops.linear.Linear('Discriminator.Output', 4*4*4*DIM, 1, output)
-
-    return tf.reshape(output, [-1])
-
-def Classifier_Discriminator(inputs):
-    output = tf.reshape(inputs, [-1] + list(OUTPUT_SHAPE))
-
-    output = lib.ops.conv2d.Conv2D('Discriminator.1',CHANNEL,DIM,5,output,stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
-    output = LeakyReLU(output)
-
-    output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
-    if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN2', [0,2,3], output)
-    output = LeakyReLU(output)
-
-    output = lib.ops.conv2d.Conv2D('Discriminator.3', 2*DIM, 4*DIM, 5, output, stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
-    if DO_BATCHNORM:
-        output = lib.ops.batchnorm.Batchnorm('Discriminator.BN3', [0,2,3], output)
-    output = LeakyReLU(output)
-
-    output = tf.reshape(output, [-1, 4*4*4*DIM])
-    output = lib.ops.linear.Linear('Discriminator.Output', 4*4*4*DIM, 10, output)
-    return output
+Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, DO_BATCHNORM, OUTPUT_COUNT, WEIGHT_NOISE_SIGMA)
 
 
 if MULTINOMIAL:
-    Discriminator = Classifier_Discriminator
     real_labels = tf.placeholder(tf.uint8, shape=[BATCH_SIZE])
     real_labels2 = tf.one_hot(real_labels, 10)
 
-fake_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
+fake_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, INPUT_DIM])
 disc_fake = Discriminator(fake_data)
-real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
+real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, INPUT_DIM])
 disc_real = Discriminator(real_data)
 
 
@@ -270,6 +228,13 @@ elif MODE.startswith('wgan-gp'):
         hard_margin_loss = (tf.reduce_max(disc_fake) - tf.reduce_min(disc_real))
         disc_cost += HARD_MARGIN_WEIGHT * hard_margin_loss
 
+    # this Momentum optimizer gives around 2% worse classification accuracy
+    # disc_optimizer = tf.train.MomentumOptimizer(
+    #     learning_rate=0.1,
+    #     momentum=0.9,
+    #     use_nesterov=True
+    # )
+
     disc_optimizer = tf.train.AdamOptimizer(
         learning_rate=1e-4,
         beta1=0.5,
@@ -363,9 +328,9 @@ with tf.Session() as session:
 
     alphas = tf.placeholder(tf.float32, shape=(BATCH_SIZE, ALPHA_COUNT))
     alphas1 = tf.expand_dims(alphas, axis=-1)
-    real_data_ph = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
+    real_data_ph = tf.placeholder(tf.float32, shape=[BATCH_SIZE, INPUT_DIM])
     real_data_ph1 = tf.expand_dims(real_data_ph, axis=1)
-    fake_data_ph = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_DIM])
+    fake_data_ph = tf.placeholder(tf.float32, shape=[BATCH_SIZE, INPUT_DIM])
     fake_data_ph1 = tf.expand_dims(fake_data_ph, axis=1)
 
     # x = alphas1*fake_data_ph1 + (1-alphas1)*real_data_ph1
@@ -414,13 +379,6 @@ with tf.Session() as session:
             if clip_disc_weights is not None:
                 _ = session.run(clip_disc_weights)
 
-        # if MULTINOMIAL:
-        #     print "TRAIN ACCURACY MULTINOMIAL", accuracy_multinomial(_disc_real, _real_data[1])
-        # else:
-        #     print "TRAIN ACCURACY", accuracy(_disc_real, _disc_fake)
-
-
-
         lib.plot.plot('train disc cost', _disc_cost)
         lib.plot.plot('train weight loss', _weight_loss)
         lib.plot.plot('time', time.time() - start_time)
@@ -462,13 +420,14 @@ with tf.Session() as session:
             else:
                 dev_fake_disc_outputs = np.concatenate(dev_fake_disc_outputs)
 
-            # print "REAL", dev_real_disc_outputs[:20], dev_real_disc_outputs.shape
-            # print "FAKE", dev_fake_disc_outputs[:20], dev_fake_disc_outputs.shape
             if MULTINOMIAL:
+                print "TRAIN ACCURACY MULTINOMIAL", accuracy_multinomial(_disc_real, _real_data[1])
                 print "DEVEL ACCURACY MULTINOMIAL", accuracy_multinomial(dev_real_disc_outputs, dev_real_labels)
             else:
+                print "TRAIN ACCURACY", accuracy(_disc_real, _disc_fake)
                 print "DEVEL ACCURACY RANKING", accuracy_ranking(dev_real_disc_outputs, dev_fake_disc_outputs)
                 print "DEVEL ACCURACY CLASSIFICATION", accuracy_classification(dev_real_disc_outputs, dev_fake_disc_outputs)
+
             lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
 
 #             # get slopes
