@@ -30,21 +30,22 @@ DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY_FACTOR = 0
-ITERS = 100 # How many generator iterations to train for
+ITERS = 5000 # How many generator iterations to train for
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
 GRADIENT_SHRINKING = False
-SHRINKING_REDUCTOR = "mean" # "none", "max", "mean", "softmax"
+SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "softmax"
 ALPHA_STRATEGY = "real"
+LIPSCHITZ_TARGET = 10.0
+COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
 
 # TARGET_DIGITS = 2, 8
 # number of elements in one class, total number is twice this:
 TRAIN_DATASET_SIZE = 2000
 TEST_DATASET_SIZE = 10000
-BALANCED = False # if BALANCED and MULTINOMIAL then  we take TRAIN_DATASET_SIZE items from each digit class
-COMBINE_OUTPUTS_FOR_SLOPES = False # if MULTINOMIAL and COMBINE_OUTPUTS_FOR_SLOPES then we take a fixed random linear combination of the softmax logits and calculate slopes on them
-DATASET="mnist" # cifar10 / mnist
-DISC_TYPE = "conv" # "conv" / "resnet"
+BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
+DATASET="cifar10" # cifar10 / mnist
+DISC_TYPE = "resnet" # "conv" / "resnet"
 
 
 if DATASET == "mnist":
@@ -102,8 +103,11 @@ loss_list = []
 
 # "if True" because I was lazy to retabulate.
 if True:
+    assert ALPHA_STRATEGY in ("real", "random"), "In the disciminative setup only real and random are supported"
+    interpolates = losses.get_slope_samples(real_data, real_data, ALPHA_STRATEGY, BATCH_SIZE)
+    slopes = get_slopes(interpolates, interpolates)
+
     if GRADIENT_SHRINKING:
-        assert False, "does not currently work, needs to be moved before disc_cost calculation"
         print "gradient shrinking"
         if SHRINKING_REDUCTOR == "mean":
             grad_norm = tf.reduce_mean(slopes)
@@ -115,18 +119,14 @@ if True:
             grad_norm = slopes
 
         disc_real /= grad_norm
+        disc_real *= LIPSCHITZ_TARGET
 
     softmax_output = tf.nn.softmax(disc_real)
     disc_cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=disc_real, 
             labels=real_labels_onehot
     ))
-    
     loss_list.append(('xent_loss', disc_cost))
-
-    assert ALPHA_STRATEGY in ("real", "random"), "In the disciminative setup only real and random are supported"
-    interpolates = losses.get_slope_samples(real_data, real_data, ALPHA_STRATEGY, BATCH_SIZE)
-    slopes = get_slopes(interpolates, interpolates)
 
     if LAMBDA > 0:
         # gradient_penalty = tf.reduce_mean(tf.maximum(0.0, slopes-1.)**4)
