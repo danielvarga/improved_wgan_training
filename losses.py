@@ -73,7 +73,12 @@ def get_slope_samples(real_data, fake_data, alpha_strategy, SUB_BATCH_SIZE):
                         alpha = tf.zeros([SUB_BATCH_SIZE,1])
             elif alpha_strategy == "random":
                         return tf.random_uniform(shape=fake_data.shape, minval=0.0, maxval=1.0)
+            elif alpha_strategy == "real_plus_noise":
+                        alpha = tf.zeros([SUB_BATCH_SIZE,1])
 
             differences = fake_data - real_data
             interpolates = real_data + (alpha*differences)
+            if alpha_strategy == "real_plus_noise":
+                        interpolates += tf.random_normal(shape=fake_data.shape, stddev=0.1)
+
             return interpolates

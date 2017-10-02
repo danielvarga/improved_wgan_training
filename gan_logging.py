@@ -78,3 +78,13 @@ def log_disc_accuracy(disc_real, disc_fake, length):
     values, indices = tf.nn.top_k(combined, k=length)
     accuracy = tf.reduce_mean(tf.cast(indices < length, tf.float32))
     tf.summary.scalar("accuracy", accuracy)
+
+def log_classifier_accuracy(output, label):
+    label = tf.cast(label, tf.int32)
+    top_values, top_indices = tf.nn.top_k(output, k=2)
+
+    correct_prediction = tf.cast(tf.equal(top_indices[:,0], label), tf.float32)
+    accuracy = tf.reduce_mean(correct_prediction)
+
+    correct_prediction_margin = tf.reduce_mean(correct_prediction * (top_values[:,0] - top_values[:,1]))
+    return accuracy, correct_prediction_margin

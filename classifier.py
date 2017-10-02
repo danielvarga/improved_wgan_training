@@ -25,18 +25,20 @@ import util
 import losses
 import data
 import networks
+import gan_logging
+
+LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
+WEIGHT_DECAY = 0
+GRADIENT_SHRINKING = False
+LIPSCHITZ_TARGET = 10.0
 
 DIM = 64 # Model dimensionality
-BATCH_SIZE = 50 # Batch size
-LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
-WEIGHT_DECAY_FACTOR = 0
-ITERS = 5000 # How many generator iterations to train for
+BATCH_SIZE = 200 # Batch size
+ITERS = 10000 # How many generator iterations to train for
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
-GRADIENT_SHRINKING = False
-SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "softmax"
 ALPHA_STRATEGY = "real"
-LIPSCHITZ_TARGET = 10.0
+SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "softmax"
 COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
 
 # TARGET_DIGITS = 2, 8
@@ -45,7 +47,7 @@ TRAIN_DATASET_SIZE = 2000
 TEST_DATASET_SIZE = 10000
 BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 DATASET="cifar10" # cifar10 / mnist
-DISC_TYPE = "resnet" # "conv" / "resnet"
+DISC_TYPE = "conv" # "conv" / "resnet"
 
 
 if DATASET == "mnist":
@@ -61,7 +63,9 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "classifier-iter{}-train{}-lambda{}-{}".format(ITERS, TOTAL_TRAIN_SIZE, LAMBDA, ALPHA_STRATEGY)
+SESSION_NAME = "classifier-lambda{}-alpha{}-wd{}".format(LAMBDA, ALPHA_STRATEGY, WEIGHT_DECAY)
+if GRADIENT_SHRINKING:
+    SESSION_NAME = "{}-lips{}".format(SESSION_NAME, LIPSCHITZ_TARGET)
 
 if BALANCED:
     (X_train, y_train), (X_test, y_test) = data.load_balanced(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
@@ -88,78 +92,76 @@ disc_filters = [param for param_name, param in lib._params.iteritems() if param_
 def activation_to_loss(activation):
     return tf.reduce_mean(tf.maximum(0.0,tf.square(activation) - 1.0))
 
-def get_slopes(input, slope_by):
+def get_slopes(input):
     output = Discriminator(input)
     if COMBINE_OUTPUTS_FOR_SLOPES:
         output_weights = tf.random_normal((OUTPUT_COUNT,))
-        gradients = tf.gradients(output * output_weights, [slope_by])[0]
+        gradients = tf.gradients(output * output_weights, [input])[0]
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     else:
-        jacobians = util.jacobian_by_batch(output, slope_by)
+        jacobians = util.jacobian_by_batch(output, input)
         slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[3]))
     return slopes
 
 loss_list = []
 
-# "if True" because I was lazy to retabulate.
-if True:
-    assert ALPHA_STRATEGY in ("real", "random"), "In the disciminative setup only real and random are supported"
-    interpolates = losses.get_slope_samples(real_data, real_data, ALPHA_STRATEGY, BATCH_SIZE)
-    slopes = get_slopes(interpolates, interpolates)
+assert ALPHA_STRATEGY in ("real", "random", "real_plus_noise"), "In the disciminative setup only real and random are supported"
+interpolates = losses.get_slope_samples(real_data, real_data, ALPHA_STRATEGY, BATCH_SIZE)
+slopes = get_slopes(interpolates)
 
-    if GRADIENT_SHRINKING:
-        print "gradient shrinking"
-        if SHRINKING_REDUCTOR == "mean":
-            grad_norm = tf.reduce_mean(slopes)
-        elif SHRINKING_REDUCTOR == "max":
-            grad_norm = tf.reduce_max(slopes)
-        elif SHRINKING_REDUCTOR == "softmax":
-            grad_norm = tf.reduce_logsumexp(slopes)
-        elif SHRINKING_REDUCTOR == "none":
-            grad_norm = slopes
+if GRADIENT_SHRINKING:
+    print "gradient shrinking"
+    if SHRINKING_REDUCTOR == "mean":
+        grad_norm = tf.reduce_mean(slopes)
+    elif SHRINKING_REDUCTOR == "max":
+        grad_norm = tf.reduce_max(slopes)
+    elif SHRINKING_REDUCTOR == "softmax":
+        grad_norm = tf.reduce_logsumexp(slopes)
+    elif SHRINKING_REDUCTOR == "none":
+        grad_norm = slopes
 
-        disc_real /= grad_norm
-        disc_real *= LIPSCHITZ_TARGET
+    disc_real /= grad_norm
+    disc_real *= LIPSCHITZ_TARGET
 
-    softmax_output = tf.nn.softmax(disc_real)
-    disc_cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-            logits=disc_real, 
-            labels=real_labels_onehot
-    ))
-    loss_list.append(('xent_loss', disc_cost))
+softmax_output = tf.nn.softmax(disc_real)
+disc_cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+    logits=disc_real, 
+    labels=real_labels_onehot
+))
+loss_list.append(('xent_loss', disc_cost))
 
-    if LAMBDA > 0:
-        # gradient_penalty = tf.reduce_mean(tf.maximum(0.0, slopes-1.)**4)
-        gradient_penalty = tf.reduce_mean((slopes-1)**4)
-        disc_cost += LAMBDA*gradient_penalty
-        loss_list.append(('gradient_penalty', gradient_penalty))
+if LAMBDA > 0:
+    # gradient_penalty = tf.reduce_mean(tf.maximum(0.0, slopes-1.)**4)
+    gradient_penalty = tf.reduce_mean((slopes-1)**4)
+    disc_cost += LAMBDA*gradient_penalty
+    loss_list.append(('gradient_penalty', gradient_penalty))
 
-    if ACTIVATION_PENALTY > 0:
-        activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY))
-        disc_cost += activation_loss
-        loss_list.append(('activation_loss', activation_loss))
+if ACTIVATION_PENALTY > 0:
+    activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY))
+    disc_cost += activation_loss
+    loss_list.append(('activation_loss', activation_loss))
 
-    # weight regularization
-    if WEIGHT_DECAY_FACTOR > 0:
-        with tf.variable_scope('weights_norm') as scope:
-            weight_loss = tf.reduce_sum(
-                input_tensor = WEIGHT_DECAY_FACTOR*tf.stack(
-                    [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
-                ),
-                name='weight_loss'
-            )
-        disc_cost += weight_loss
-    else:
-        weight_loss = tf.constant(0.0)
-    loss_list.append(('weight_loss', weight_loss))
+# weight regularization
+if WEIGHT_DECAY > 0:
+    with tf.variable_scope('weights_norm') as scope:
+        weight_loss = tf.reduce_sum(
+            input_tensor = WEIGHT_DECAY*tf.stack(
+                [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+            ),
+            name='weight_loss'
+        )
+    disc_cost += weight_loss
+else:
+    weight_loss = tf.constant(0.0)
+loss_list.append(('weight_loss', weight_loss))
 
-    disc_optimizer = tf.train.AdamOptimizer(
-        learning_rate=1e-4,
-        beta1=0.5,
-        beta2=0.9
-    )
-    disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
-    disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
+disc_optimizer = tf.train.AdamOptimizer(
+    learning_rate=1e-4,
+    beta1=0.5,
+    beta2=0.9
+)
+disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
+disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
 
 
 # Train loop
@@ -184,6 +186,17 @@ with tf.Session() as session:
             tf.summary.histogram(var.name + "/gradients", grad)
 
     tf.summary.scalar("disc_cost", disc_cost)
+    tf.summary.histogram("slopes", slopes)
+
+    # log accuracy
+    real_labels2 = tf.placeholder(tf.uint8, shape=[None])
+    real_data2 = tf.placeholder(tf.float32, shape=[None, INPUT_DIM])
+    disc_real2 = Discriminator(real_data2)
+    softmax_output2 = tf.nn.softmax(disc_real2)
+    dev_acc, dev_pred_confidence = gan_logging.log_classifier_accuracy(softmax_output2, real_labels2)
+    tf.summary.scalar("accuracy", dev_acc)
+    tf.summary.scalar("prediction confidence", dev_pred_confidence)
+
 
     for (name, loss) in loss_list:
         tf.summary.scalar(name, loss)
@@ -211,6 +224,7 @@ with tf.Session() as session:
             dev_disc_costs = []
             dev_real_disc_outputs = []
             dev_real_labels = []
+            dev_real_data = []
 
             for _real_data_test in data.classifier_generator((X_test, y_test), BATCH_SIZE, infinity=False):
                 _dev_disc_cost, _dev_real_disc_output = session.run(
@@ -220,9 +234,11 @@ with tf.Session() as session:
                 dev_disc_costs.append(_dev_disc_cost)
                 dev_real_disc_outputs.append(_dev_real_disc_output)
                 dev_real_labels.append(_real_data_test[1])
+                dev_real_data.append(_real_data_test[0])
 
             dev_real_disc_outputs = np.concatenate(dev_real_disc_outputs)
             dev_real_labels = np.concatenate(dev_real_labels)
+            dev_real_data = np.concatenate(dev_real_data)
             print "TRAIN ACCURACY", accuracy(_disc_real, _real_data[1])
             print "DEVEL ACCURACY", accuracy(dev_real_disc_outputs, dev_real_labels)
 
@@ -235,7 +251,9 @@ with tf.Session() as session:
             summary = session.run([merged_summary_op],
                                       feed_dict={
                                           real_data: _real_data_test[0],
-                                          real_labels: _real_data_test[1]
+                                          real_labels: _real_data_test[1],
+                                          real_data2: dev_real_data,
+                                          real_labels2: dev_real_labels
                                       })
 
             summary_writer.add_summary(summary[0], iteration)
