@@ -43,6 +43,21 @@ def jacobian(y_flat, x):
     result = jacobian.stack()
     return result
 
+def jacobian_by_batch(ys, xs):
+    n = ys.shape[1]
+
+    loop_vars = [
+        tf.constant(0, tf.int32),
+        tf.TensorArray(tf.float32, size=n),
+    ]
+
+    _, jacobian = tf.while_loop(
+        lambda j, _: j < n,
+        lambda j, result: (j+1, result.write(j, tf.gradients(ys[:,j], xs))),
+        loop_vars)
+    result = jacobian.stack()
+    return result
+
 def get_weight_loss(weights, wd):
     losses = [tf.nn.l2_loss(var) for var in weights]
     weight_loss = wd * tf.reduce_sum(losses)
