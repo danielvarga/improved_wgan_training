@@ -4,15 +4,11 @@ from keras.datasets import mnist, cifar10
 def load_raw_data(dataset):
     if dataset == "mnist":
         (X_train, y_train), (X_test, y_test) = mnist.load_data()
-        X_train = np.expand_dims(X_train, 1)
-        X_test = np.expand_dims(X_test, 1)
+        X_train = np.expand_dims(X_train, 3)
+        X_test = np.expand_dims(X_test, 3)
 
     elif dataset == "cifar10":
         (X_train, y_train), (X_test, y_test) = cifar10.load_data()
-        # X_train = X_train[:,2:30,2:30]
-        # X_test = X_test[:,2:30,2:30]
-        X_train = np.transpose(X_train, axes=(0,3,1,2))
-        X_test = np.transpose(X_test, axes=(0,3,1,2))
         y_train = np.squeeze(y_train)
         y_test = np.squeeze(y_test)
 
@@ -22,11 +18,9 @@ def load_raw_data(dataset):
     X_train /= 255
     X_test /= 255
 
-    output_dim = np.prod(X_train.shape[1:])
-    X_train = np.reshape(X_train, [-1, output_dim])
-    X_test = np.reshape(X_test, [-1, output_dim])
+    X_train = featurewise_std_normalization(featurewise_center(X_train))
+    X_test = featurewise_std_normalization(featurewise_center(X_test))
 
-                               
     return (X_train, y_train), (X_test, y_test)
 
 
@@ -98,3 +92,19 @@ def classifier_generator((xs, ys), batch_size, infinity=True):
             i += 1
         if not infinity:
             break
+
+def featurewise_center(xs):
+    assert xs.ndim == 4
+    mean = np.mean(xs, axis=(0, 1, 2))
+    mean = np.expand_dims(mean, 0)
+    mean = np.expand_dims(mean, 0)
+    mean = np.expand_dims(mean, 0)
+    return xs - mean
+
+def featurewise_std_normalization(xs):
+    assert xs.ndim == 4
+    std = np.std(xs, axis=(0, 1, 2))
+    std = np.expand_dims(std, 0)
+    std = np.expand_dims(std, 0)
+    std = np.expand_dims(std, 0)
+    return xs / (std + 1e-7)

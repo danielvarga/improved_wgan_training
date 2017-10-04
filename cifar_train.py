@@ -28,11 +28,11 @@ import keras.losses as losses
 
 import tensorflow as tf
 
-LAMBDA = 0.001
+LAMBDA = 0 #0.001
 
 batch_size = 128
 nb_classes = 10
-nb_epoch = 25*500
+nb_epoch = 5#25*500
 N = 3
 weight_decay = 1e-4
 lr_schedule = [0.5, 0.75]
@@ -226,9 +226,9 @@ def schedule(epoch_idx):
     return 0.001
 
 datagen = ImageDataGenerator(
-    featurewise_center=True,
+    featurewise_center=False,
     samplewise_center=False,
-    featurewise_std_normalization=True,
+    featurewise_std_normalization=False,
     samplewise_std_normalization=False,
     zca_whitening=False,
     rotation_range=0,
@@ -239,9 +239,9 @@ datagen = ImageDataGenerator(
 datagen.fit(X_train)
 
 test_datagen = ImageDataGenerator(
-    featurewise_center=True,
+    featurewise_center=False,
     samplewise_center=False,
-    featurewise_std_normalization=True,
+    featurewise_std_normalization=False,
     samplewise_std_normalization=False,
     zca_whitening=False,
     rotation_range=0,
