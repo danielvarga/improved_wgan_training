@@ -24,6 +24,9 @@ net = 3
 FUSED=False
 RESNET_BLOCKS_PER_LAYER = 2
 
+counter = 0
+
+
 def LeakyReLU(x, alpha=0.2):
     return tf.maximum(alpha*x, x)
 
@@ -104,46 +107,52 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         return output
 
     def CifarResnet(inputs):
+
         N = 3
         filter_num_config = [16, 32, 64]
         wideness = 1
         filter_num_config = [wideness * i for i in filter_num_config]
         weight_decay = 0.0 #1e-4
 
+
         def residual_drop(x, input_shape, output_shape, strides=(1, 1)):
+            global counter
+            counter += 1
+
             nb_filter = output_shape[0]
-            conv = Conv2D(nb_filter, (3, 3), strides=strides,
-                          padding="same", kernel_regularizer=l2(weight_decay))(x)
-            conv = BatchNormalization()(conv)
-            conv = Activation("relu")(conv)
-            conv = Conv2D(nb_filter, (3, 3),
-                          padding="same", kernel_regularizer=l2(weight_decay))(conv)
-            conv = BatchNormalization()(conv)
-            
+
+            output = x
+
+            filter_size = 3
+            output = lib.ops.conv2d.Conv2D("Discriminator.{}.1".format(counter), input_dim=input_shape[0], output_dim=nb_filter, filter_size=filter_size, inputs=output, stride=strides[0], weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+            output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.1".format(counter), [0,2,3], output, fused=FUSED)
+            output = LeakyReLU(output, alpha=0.0)
+
+            output = lib.ops.conv2d.Conv2D("Discriminator.{}.2".format(counter), nb_filter, nb_filter, filter_size, output, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+            output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.2".format(counter), [0,2,3], output, fused=FUSED)
+
             if strides[0] >= 2:
-                x = AveragePooling2D(strides)(x)
+                x = tf.contrib.layers.avg_pool2d(x, strides, data_format='NCHW')
+
             if (output_shape[0] - input_shape[0]) > 0:
-                pad_shape = (1,
+                pad_shape = (BATCH_SIZE,
+                             output_shape[0] - input_shape[0],
                              output_shape[1],
-                             output_shape[2],
-                             output_shape[0] - input_shape[0])
-                padding = K.zeros(pad_shape)
-                padding = K.repeat_elements(padding, BATCH_SIZE, axis=0)
-                x = Lambda(lambda y: K.concatenate([y, padding], axis=3),
-                           output_shape=(output_shape[1], output_shape[2], output_shape[0]))(x)
+                             output_shape[2])
+                padding = tf.zeros(shape=pad_shape)
+                x = tf.concat([x, padding], axis=1)
 
-            out = Add()([conv, x])
-            out = Activation("relu")(out)
+            output = x + output
+            output = LeakyReLU(output, alpha=0.0)
 
-            gate = K.variable(1.0, dtype="float32")
-            return Lambda(lambda tensors: K.switch(gate, tensors[0], tensors[1]),
-                          output_shape=(output_shape[1], output_shape[2], output_shape[0]))([out, x])
-            
+            return output
+
 
         def build_net(inputs, filter_num_config, nb_classes=10):
-            net = Conv2D(filter_num_config[0], (3, 3), padding="same", kernel_regularizer=l2(weight_decay))(inputs)
-            net = BatchNormalization()(net)
-            net = Activation("relu")(net)
+
+            net = lib.ops.conv2d.Conv2D("Discriminator.{}".format(counter), 3, filter_num_config[0], 3, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+            net = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}".format(counter), [0,2,3], net, fused=FUSED)
+            net = LeakyReLU(net, alpha=0.0)
 
             for i in range(N):
                 net = residual_drop(net, input_shape=(filter_num_config[0], 32, 32), output_shape=(filter_num_config[0], 32, 32))
@@ -174,15 +183,23 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
                     output_shape=(filter_num_config[2], 8, 8)
                 )
 
-            pool = AveragePooling2D((8, 8))(net)
-            flatten = Flatten()(pool)
 
-            predictions = Dense(nb_classes, activation=None, kernel_regularizer=l2(weight_decay))(flatten)
-            predictions = Activation("softmax")(predictions)
+            pool = tf.contrib.layers.avg_pool2d(net, 8, data_format='NCHW')
+            flatten = tf.reshape(pool, [BATCH_SIZE, -1])
+
+            #predictions = lib.ops.linear.Linear('Discriminator.1', input_dim, nb_classes, pool) # wdecay kell
+            predictions = tf.layers.dense(flatten, nb_classes)
+
+	    print("preds")
+            print(predictions.shape)
+            #predictions = tf.nn.softmax(predictions)
 
             return predictions
 
         output = tf.reshape(inputs, [-1] + list(INPUT_SHAPE))
+        output = tf.transpose(output, [0, 3, 1, 2])
+
+        print(output.shape)
         output = build_net(output, filter_num_config=filter_num_config, nb_classes=10)
         return output
 

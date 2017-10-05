@@ -134,7 +134,7 @@ if GRADIENT_SHRINKING:
 
 softmax_output = tf.nn.softmax(disc_real)
 disc_cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-    logits=disc_real, 
+    logits=disc_real,
     labels=real_labels_onehot
 ))
 loss_list.append(('xent_loss', disc_cost))
