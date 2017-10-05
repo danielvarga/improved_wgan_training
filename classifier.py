@@ -63,7 +63,7 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "classifier-lambda{}-alpha{}-wd{}".format(LAMBDA, ALPHA_STRATEGY, WEIGHT_DECAY)
+SESSION_NAME = "classifier-disc_{}-lambda{}-alpha{}-wd{}".format(DISC_TYPE, LAMBDA, ALPHA_STRATEGY, WEIGHT_DECAY)
 if GRADIENT_SHRINKING:
     SESSION_NAME = "{}-lips{}".format(SESSION_NAME, LIPSCHITZ_TARGET)
 
