@@ -28,14 +28,14 @@ import data
 import networks
 import gan_logging
 
-LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
+LAMBDA = 0 #1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY = 0
 GRADIENT_SHRINKING = False
 LIPSCHITZ_TARGET = 10.0
 
 DIM = 64 # Model dimensionality
-BATCH_SIZE = 50 # Batch size
-ITERS = 10000 # How many iterations to train for
+BATCH_SIZE = 128 # Batch size
+ITERS = 30000 # How many iterations to train for
 DO_BATCHNORM = True
 ACTIVATION_PENALTY = 0.0
 ALPHA_STRATEGY = "real"
@@ -57,7 +57,7 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "classifier-lambda{}-alpha{}-wd{}".format(LAMBDA, ALPHA_STRATEGY, WEIGHT_DECAY)
+SESSION_NAME = "classifier-disc_{}-lambda{}-alpha{}-wd{}".format(DISC_TYPE, LAMBDA, ALPHA_STRATEGY, WEIGHT_DECAY)
 if GRADIENT_SHRINKING:
     SESSION_NAME = "{}-lips{}".format(SESSION_NAME, LIPSCHITZ_TARGET)
 
@@ -164,16 +164,19 @@ else:
     weight_loss = tf.constant(0.0)
 loss_list.append(('weight_loss', weight_loss))
 
-# disc_optimizer = tf.train.MomentumOptimizer(
-#     learning_rate=0.1,
-#     momentum=0.9,
-#     use_nesterov=True
-# )
-disc_optimizer = tf.train.AdamOptimizer(
-    learning_rate=1e-4,
-    beta1=0.5,
-    beta2=0.9
+disc_optimizer = tf.train.MomentumOptimizer(
+    learning_rate=0.1,
+    momentum=0.9,
+    use_nesterov=True
 )
+
+# this works much worse for cifarResnet
+# disc_optimizer = tf.train.AdamOptimizer(
+#     learning_rate=1e-4,
+#     beta1=0.5,
+#     beta2=0.9
+# )
+
 disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
 disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
 
@@ -246,7 +249,7 @@ with tf.Session() as session:
                 _dev_disc_cost, _dev_real_disc_output = session.run(
                     [disc_cost, disc_real],
                     feed_dict={
-                        K.learning_phase():False,
+                        K.learning_phase():True,
                         real_data: _real_data_test[0], real_labels: _real_data_test[1]}
                 )
                 dev_disc_costs.append(_dev_disc_cost)
@@ -268,7 +271,7 @@ with tf.Session() as session:
 
             summary = session.run([merged_summary_op],
                                       feed_dict={
-                                          K.learning_phase():False,
+                                          K.learning_phase():True,
                                           real_data: _real_data_test[0],
                                           real_labels: _real_data_test[1]
 #                                          real_data2: dev_real_data,

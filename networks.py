@@ -102,8 +102,8 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         output = tf.reshape(inputs, [-1, input_dim])
 
         output = lib.ops.linear.Linear('Discriminator.1', input_dim, 1000, output)
-        # output = LeakyReLU(output)
-        # output = lib.ops.linear.Linear('Discriminator.2', 1000, 1000, output)
+        output = LeakyReLU(output)
+        output = lib.ops.linear.Linear('Discriminator.2', 1000, 1000, output)
         output = LeakyReLU(output)
         output = lib.ops.linear.Linear('Discriminator.output', 1000, OUTPUT_COUNT, output)
         return output
@@ -114,7 +114,6 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         wideness = 1
         filter_num_config = [wideness * i for i in filter_num_config]
         weight_decay = 0.0 #1e-4
-        death_rate = 0.0
 
         def residual_drop(x, input_shape, output_shape, strides=(1, 1)):
             nb_filter = output_shape[0]
@@ -137,11 +136,6 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
                 padding = K.repeat_elements(padding, BATCH_SIZE, axis=0)
                 x = Lambda(lambda y: K.concatenate([y, padding], axis=3),
                            output_shape=(output_shape[1], output_shape[2], output_shape[0]))(x)
-            _death_rate = K.variable(death_rate)
-            scale = K.ones_like(conv) - _death_rate
-
-            conv = Lambda(lambda c: K.in_test_phase(scale * c, c),
-                          output_shape=(output_shape[1], output_shape[2], output_shape[0]))(conv)
 
             out = Add()([conv, x])
             out = Activation("relu")(out)
