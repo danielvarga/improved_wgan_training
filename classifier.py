@@ -49,7 +49,7 @@ TEST_DATASET_SIZE = 10000
 BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 OUTPUT_COUNT = 10
 DATASET="cifar10" # cifar10 / mnist
-DISC_TYPE = "cifarResnet" # "conv" / "resnet" / "dense" / "cifarResnet"
+DISC_TYPE = "resnet" # "conv" / "resnet" / "dense" / "cifarResnet"
 
 
 if BALANCED:
@@ -164,18 +164,18 @@ else:
     weight_loss = tf.constant(0.0)
 loss_list.append(('weight_loss', weight_loss))
 
-disc_optimizer = tf.train.MomentumOptimizer(
-    learning_rate=0.1,
-    momentum=0.9,
-    use_nesterov=True
-)
-
-# this works much worse for cifarResnet
-# disc_optimizer = tf.train.AdamOptimizer(
-#     learning_rate=1e-4,
-#     beta1=0.5,
-#     beta2=0.9
-# )
+if DISC_TYPE == "cifarResnet":
+    disc_optimizer = tf.train.MomentumOptimizer(
+        learning_rate=0.1,
+        momentum=0.9,
+        use_nesterov=True
+    )
+else:
+    disc_optimizer = tf.train.AdamOptimizer(
+        learning_rate=1e-4,
+        beta1=0.5,
+        beta2=0.9
+    )
 
 disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
 disc_train_op = disc_optimizer.apply_gradients(disc_gvs)

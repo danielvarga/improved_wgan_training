@@ -1,8 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from six.moves import range
-
 import functools
 
 import numpy as np
@@ -146,8 +141,6 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
             
 
         def build_net(inputs, filter_num_config, nb_classes=10):
-            global net
-            print(inputs.shape)
             net = Conv2D(filter_num_config[0], (3, 3), padding="same", kernel_regularizer=l2(weight_decay))(inputs)
             net = BatchNormalization()(net)
             net = Activation("relu")(net)
@@ -207,6 +200,7 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
 
 
 def BottleneckResidualBlock(name, input_dim, output_dim, filter_size, inputs, resample=None, he_init=True):
+
     """
     resample: None, 'down', or 'up'
     """
@@ -224,7 +218,7 @@ def BottleneckResidualBlock(name, input_dim, output_dim, filter_size, inputs, re
         conv_shortcut = lib.ops.conv2d.Conv2D
         conv_1        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=input_dim,  output_dim=input_dim/2)
         conv_1b       = functools.partial(lib.ops.conv2d.Conv2D, input_dim=input_dim/2,  output_dim=output_dim/2)
-        conv_2        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=input_dim/2, output_dim=output_dim)
+        conv_2        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=output_dim/2, output_dim=output_dim)
 
     else:
         raise Exception('invalid resample value')
