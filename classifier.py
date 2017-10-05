@@ -27,13 +27,13 @@ import data
 import networks
 import gan_logging
 
-LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
+LAMBDA = 0 #1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY = 0
 GRADIENT_SHRINKING = False
 LIPSCHITZ_TARGET = 10.0
 
 DIM = 64 # Model dimensionality
-BATCH_SIZE = 200 # Batch size
+BATCH_SIZE = 50 # Batch size
 ITERS = 10000 # How many generator iterations to train for
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
@@ -47,7 +47,7 @@ TRAIN_DATASET_SIZE = 2000
 TEST_DATASET_SIZE = 10000
 BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 DATASET="cifar10" # cifar10 / mnist
-DISC_TYPE = "conv" # "conv" / "resnet"
+DISC_TYPE = "resnet" # "conv" / "resnet"
 
 
 if DATASET == "mnist":
@@ -188,14 +188,14 @@ with tf.Session() as session:
     tf.summary.scalar("disc_cost", disc_cost)
     tf.summary.histogram("slopes", slopes)
 
-    # log accuracy
-    real_labels2 = tf.placeholder(tf.uint8, shape=[None])
-    real_data2 = tf.placeholder(tf.float32, shape=[None, INPUT_DIM])
-    disc_real2 = Discriminator(real_data2)
-    softmax_output2 = tf.nn.softmax(disc_real2)
-    dev_acc, dev_pred_confidence = gan_logging.log_classifier_accuracy(softmax_output2, real_labels2)
-    tf.summary.scalar("accuracy", dev_acc)
-    tf.summary.scalar("prediction confidence", dev_pred_confidence)
+    # # log accuracy
+    # real_labels2 = tf.placeholder(tf.uint8, shape=[None])
+    # real_data2 = tf.placeholder(tf.float32, shape=[None, INPUT_DIM])
+    # disc_real2 = Discriminator(real_data2)
+    # softmax_output2 = tf.nn.softmax(disc_real2)
+    # dev_acc, dev_pred_confidence = gan_logging.log_classifier_accuracy(softmax_output2, real_labels2)
+    # tf.summary.scalar("accuracy", dev_acc)
+    # tf.summary.scalar("prediction confidence", dev_pred_confidence)
 
 
     for (name, loss) in loss_list:
@@ -251,9 +251,9 @@ with tf.Session() as session:
             summary = session.run([merged_summary_op],
                                       feed_dict={
                                           real_data: _real_data_test[0],
-                                          real_labels: _real_data_test[1],
-                                          real_data2: dev_real_data,
-                                          real_labels2: dev_real_labels
+                                          real_labels: _real_data_test[1]
+#                                          real_data2: dev_real_data,
+#                                          real_labels2: dev_real_labels
                                       })
 
             summary_writer.add_summary(summary[0], iteration)
