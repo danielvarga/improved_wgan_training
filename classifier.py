@@ -28,9 +28,9 @@ import data
 import networks
 import gan_logging
 
-LAMBDA = 0 #1e-4 # Gradient penalty lambda hyperparameter
+LAMBDA = 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY = 0
-GRADIENT_SHRINKING = False
+GRADIENT_SHRINKING = True
 LIPSCHITZ_TARGET = 10.0
 
 DIM = 64 # Model dimensionality
@@ -140,8 +140,8 @@ disc_cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
 loss_list.append(('xent_loss', disc_cost))
 
 if LAMBDA > 0:
-    # gradient_penalty = tf.reduce_mean(tf.maximum(0.0, slopes-1.)**4)
-    gradient_penalty = tf.reduce_mean((slopes-1)**4)
+    gradient_penalty = tf.reduce_mean(tf.maximum(1.0, slopes/LIPSCHITZ_TARGET)**2)
+#    gradient_penalty = tf.reduce_mean((slopes-1)**4)
     disc_cost += LAMBDA*gradient_penalty
     loss_list.append(('gradient_penalty', gradient_penalty))
 
