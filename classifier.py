@@ -1,3 +1,4 @@
+import time
 import os, sys
 sys.path.append(os.getcwd())
 
@@ -89,10 +90,10 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-aug_{}-bs_{}".format(
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-aug_{}-bs_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n", "y" if LEARNING_RATE_DECAY else "n",
-    AUGMENTATION, BATCH_SIZE)
+    AUGMENTATION, BATCH_SIZE,time.strftime('%Y%m%d-%H%M%S'))
 
 if BALANCED:
     (X_train, y_train), (X_test, y_test) = data.load_balanced(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
@@ -258,6 +259,20 @@ with tf.Session() as session:
 #    merged_summary_op = tf.summary.merge_all()
 
     print "NETWORK PARAMETER COUNT", np.sum([np.prod(v.shape) for v in tf.trainable_variables()])
+
+    # # log settings in tensorboard
+    # all_vars = [(k,v) for (k,v) in locals().copy().items() if (k.isupper() and k!='T' and k!='SETTINGS' and k!='ALL_SETTINGS')]
+    # all_vars = sorted(all_vars, key=lambda x: x[0])
+    # settings_string = "\n".join(["{}: {}".format(var_name, var_value) for var_name, var_value in all_vars])
+    # print settings_string
+    # settings_summary = tf.Summary(value=[
+    #     tf.Summary.Value(tag="settings summary", simple_value=settings_string), 
+    # ])
+    # test_writer.add_summary(settings_summary)
+    # train_writer.add_summary(settings_summary)
+
+
+
 
     for iteration in xrange(ITERS+1):
         start_time = time.time()
