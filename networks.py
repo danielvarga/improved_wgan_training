@@ -128,7 +128,7 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
             output = lib.ops.conv2d.Conv2D("Discriminator.{}.2".format(counter), nb_filter, nb_filter, filter_size, output, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
             if DO_BATCHNORM:
                 output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.2".format(counter), [0,2,3], output, fused=FUSED)
-            
+
             if strides[0] >= 2:
                 x = tf.contrib.layers.avg_pool2d(x, strides, data_format='NCHW')
 
@@ -186,19 +186,13 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
             pool = tf.contrib.layers.avg_pool2d(net, 8, data_format='NCHW')
             flatten = tf.reshape(pool, [BATCH_SIZE, -1])
 
-            #predictions = lib.ops.linear.Linear('Discriminator.1', input_dim, nb_classes, pool) # wdecay kell
-            predictions = tf.layers.dense(flatten, nb_classes)
-
-	    print("preds")
-            print(predictions.shape)
-            #predictions = tf.nn.softmax(predictions)
+            predictions = lib.ops.linear.Linear('Discriminator.1', flatten.get_shape().as_list()[1], nb_classes, flatten)
 
             return predictions
 
         output = tf.reshape(inputs, [-1] + list(INPUT_SHAPE))
         output = tf.transpose(output, [0, 3, 1, 2])
 
-        print(output.shape)
         output = build_net(output, filter_num_config=filter_num_config, nb_classes=10)
         return output
 
