@@ -3,6 +3,7 @@ if [ "$#" -le 3 ]; then
     echo "Writes to couts/NAME.PARAMETER_VALUE.cout"
     echo "For example:"
     echo "CUDA_VISIBLE_DEVICES=1 bash grid.sh test TRAIN_DATASET_SIZE `seq 2000 10000 2000`"
+    echo "bash grid.sh test LAMBDA `awk 'BEGIN{ for (i=0.0001; i<1.1; i*=10) { print i } }'`"
     exit 1
 fi
 
