@@ -6,20 +6,18 @@ import tensorflow as tf
 import tflib as lib
 import tflib.ops.layernorm
 
-from keras.datasets import cifar100
-from keras.datasets import cifar10
-from keras.layers import Input, Dense, Layer, Activation, Flatten, Lambda, Add
-from keras.layers.convolutional import Conv2D, AveragePooling2D
-from keras.layers.normalization import BatchNormalization
-from keras.models import Model
-from keras.optimizers import SGD
-from keras.regularizers import l2
-from keras.callbacks import Callback, LearningRateScheduler, TensorBoard
-from keras.preprocessing.image import ImageDataGenerator
-from keras.utils import np_utils
-import keras.backend as K
-
-net = 3
+# from keras.datasets import cifar100
+# from keras.datasets import cifar10
+# from keras.layers import Input, Dense, Layer, Activation, Flatten, Lambda, Add
+# from keras.layers.convolutional import Conv2D, AveragePooling2D
+# from keras.layers.normalization import BatchNormalization
+# from keras.models import Model
+# from keras.optimizers import SGD
+# from keras.regularizers import l2
+# from keras.callbacks import Callback, LearningRateScheduler, TensorBoard
+# from keras.preprocessing.image import ImageDataGenerator
+# from keras.utils import np_utils
+# import keras.backend as K
 
 FUSED=False
 RESNET_BLOCKS_PER_LAYER = 2
@@ -112,8 +110,6 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         filter_num_config = [16, 32, 64]
         wideness = 1
         filter_num_config = [wideness * i for i in filter_num_config]
-        weight_decay = 0.0 #1e-4
-
 
         def residual_drop(x, input_shape, output_shape, strides=(1, 1)):
             global counter
@@ -125,12 +121,14 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
 
             filter_size = 3
             output = lib.ops.conv2d.Conv2D("Discriminator.{}.1".format(counter), input_dim=input_shape[0], output_dim=nb_filter, filter_size=filter_size, inputs=output, stride=strides[0], weight_noise_sigma=WEIGHT_NOISE_SIGMA)
-            output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.1".format(counter), [0,2,3], output, fused=FUSED)
+            if DO_BATCHNORM:
+                output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.1".format(counter), [0,2,3], output, fused=FUSED)
             output = LeakyReLU(output, alpha=0.0)
 
             output = lib.ops.conv2d.Conv2D("Discriminator.{}.2".format(counter), nb_filter, nb_filter, filter_size, output, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
-            output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.2".format(counter), [0,2,3], output, fused=FUSED)
-
+            if DO_BATCHNORM:
+                output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.2".format(counter), [0,2,3], output, fused=FUSED)
+            
             if strides[0] >= 2:
                 x = tf.contrib.layers.avg_pool2d(x, strides, data_format='NCHW')
 
@@ -151,7 +149,8 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         def build_net(inputs, filter_num_config, nb_classes=10):
 
             net = lib.ops.conv2d.Conv2D("Discriminator.{}".format(counter), 3, filter_num_config[0], 3, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
-            net = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}".format(counter), [0,2,3], net, fused=FUSED)
+            if DO_BATCHNORM:
+                net = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}".format(counter), [0,2,3], net, fused=FUSED)
             net = LeakyReLU(net, alpha=0.0)
 
             for i in range(N):
