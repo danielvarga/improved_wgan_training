@@ -96,10 +96,10 @@ if DISC_TYPE in ("conv", "resnet"):
 INPUT_SHAPE = X_train.shape[1:]
 INPUT_DIM = np.prod(INPUT_SHAPE)
 
-X_train = np.reshape(X_train, [-1, INPUT_DIM])
-X_test = np.reshape(X_test, [-1, INPUT_DIM])
+#X_train = np.reshape(X_train, [-1, INPUT_DIM])
+#X_test = np.reshape(X_test, [-1, INPUT_DIM])
 
-real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE)
+real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE, augment=False)
 
 lib.print_model_settings(locals().copy())
 
