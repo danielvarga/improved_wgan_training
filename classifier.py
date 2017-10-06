@@ -34,7 +34,7 @@ LIPSCHITZ_TARGET = 1.0
 
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
-ITERS = 30000 # How many iterations to train for
+ITERS = 10000 # How many iterations to train for
 DO_BATCHNORM = True
 ACTIVATION_PENALTY = 0.0
 ALPHA_STRATEGY = "real"
