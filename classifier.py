@@ -85,7 +85,6 @@ else:
 
 SESSION_NAME = "classifier-disc_{}-lambda{}-alpha{}-wd{}-lips{}".format(DISC_TYPE, LAMBDA, ALPHA_STRATEGY, WEIGHT_DECAY, LIPSCHITZ_TARGET)
 
-
 if BALANCED:
     (X_train, y_train), (X_test, y_test) = data.load_balanced(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
 else:
@@ -216,24 +215,28 @@ with tf.Session() as session:
     session.run(tf.global_variables_initializer())
 
     LOG_DIR = "logs/%s" % SESSION_NAME
+    train_writer = tf.summary.FileWriter(LOG_DIR + '/train', graph=tf.get_default_graph())
+    test_writer = tf.summary.FileWriter(LOG_DIR + '/test', graph=tf.get_default_graph())
 
-    summary_writer = tf.summary.FileWriter(LOG_DIR, graph=tf.get_default_graph())
+    loss_summaries = []
+    extra_summaries = []
+
+    loss_summaries.append(tf.summary.scalar("disc_cost", disc_cost))
+    for (name, loss) in loss_list:
+        loss_summaries.append(tf.summary.scalar(name, loss))
+    merged_loss_summary_op = tf.summary.merge(loss_summaries)
+
 
     for param_name, param in lib._params.iteritems():
         print param_name, param
-        tf.summary.histogram(param_name+"/weights", param)
-
+        extra_summaries.append(tf.summary.histogram(param_name+"/weights", param))
     for grad, var in disc_gvs:
         if grad is not None:
-            tf.summary.histogram(var.name + "/gradients", grad)
+            extra_summaries.append(tf.summary.histogram(var.name + "/gradients", grad))
+    extra_summaries.append(tf.summary.histogram("slopes", slopes))
+    merged_extra_summary_op = tf.summary.merge(extra_summaries)
 
-    tf.summary.scalar("disc_cost", disc_cost)
-    tf.summary.histogram("slopes", slopes)
-
-    for (name, loss) in loss_list:
-        tf.summary.scalar(name, loss)
-
-    merged_summary_op = tf.summary.merge_all()
+#    merged_summary_op = tf.summary.merge_all()
 
     print "NETWORK PARAMETER COUNT", np.sum([np.prod(v.shape) for v in tf.trainable_variables()])
 
@@ -242,8 +245,8 @@ with tf.Session() as session:
 
         _real_data = real_gen.next()
 
-        _weight_loss, _disc_cost, _,  _disc_real = session.run(
-                [weight_loss, disc_cost, disc_train_op, disc_real],
+        _weight_loss, _disc_cost, _,  _disc_real, summary_loss = session.run(
+                [weight_loss, disc_cost, disc_train_op, disc_real, merged_loss_summary_op],
                 feed_dict={
                     real_data: _real_data[0], real_labels: _real_data[1]}
             )
@@ -251,6 +254,13 @@ with tf.Session() as session:
         lib.plot.plot('train disc cost', _disc_cost)
         lib.plot.plot('train weight loss', _weight_loss)
         lib.plot.plot('time', time.time() - start_time)
+
+        train_writer.add_summary(summary_loss, iteration)
+        train_acc = accuracy(_disc_real, _real_data[1])
+        train_summary_acc = tf.Summary(value=[
+            tf.Summary.Value(tag="accuracy", simple_value=train_acc),
+        ])
+        train_writer.add_summary(train_summary_acc, iteration)
 
         # Calculate dev loss and generate samples every 100 iters
         if iteration <= 5 or iteration % 500 == 0:
@@ -273,29 +283,28 @@ with tf.Session() as session:
             dev_real_disc_outputs = np.concatenate(dev_real_disc_outputs)
             dev_real_labels = np.concatenate(dev_real_labels)
             dev_real_data = np.concatenate(dev_real_data)
+            dev_cost = np.mean(dev_disc_costs)
             dev_acc = accuracy(dev_real_disc_outputs, dev_real_labels)
-            print "TRAIN ACCURACY", accuracy(_disc_real, _real_data[1])
+            print "TRAIN ACCURACY", train_acc
             print "DEVEL ACCURACY", dev_acc
             
-            dev_summary = tf.Summary(value=[
-                tf.Summary.Value(tag="dev acc", simple_value=dev_acc), 
-            ])
-            summary_writer.add_summary(dev_summary, iteration)
-
-
-            lib.plot.plot('dev disc cost', np.mean(dev_disc_costs))
+            lib.plot.plot('dev disc cost', dev_cost)
 
             if iteration % 2500 == 0:
                 saver = tf.train.Saver()
                 saver.save(session, os.path.join(LOG_DIR, "model.ckpt"), iteration)
 
-            summary = session.run([merged_summary_op],
-                                      feed_dict={
-                                          real_data: _real_data_test[0],
-                                          real_labels: _real_data_test[1]
-                                      })
-
-            summary_writer.add_summary(summary[0], iteration)
+            dev_summary_loss, dev_summary_extra = session.run([merged_loss_summary_op, merged_extra_summary_op],
+                                                              feed_dict={
+                                                                  real_data: _real_data_test[0],
+                                                                  real_labels: _real_data_test[1]
+                                                              })
+            dev_summary_acc = tf.Summary(value=[
+                tf.Summary.Value(tag="accuracy", simple_value=dev_acc), 
+            ])
+            test_writer.add_summary(dev_summary_loss, iteration)
+            test_writer.add_summary(dev_summary_extra, iteration)
+            test_writer.add_summary(dev_summary_acc, iteration)
 
         # Write logs every 100 iters
         if (iteration <= 5) or (iteration % 500 == 0):
