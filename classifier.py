@@ -49,6 +49,34 @@ OUTPUT_COUNT = 10
 DATASET="cifar10" # cifar10 / mnist
 DISC_TYPE = "cifarResnet" # "conv" / "resnet" / "dense" / "cifarResnet"
 
+def heuristic_cast(s):
+    s = s.strip() # Don't let some stupid whitespace fool you.
+    if s=="None":
+        return None
+    elif s=="True":
+        return True
+    elif s=="False":
+        return False
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return s
+
+for k, v in [arg.split('=', 1) for arg in sys.argv[1:]]:
+    assert v != '', "Malformed command line"
+    assert k.startswith('--'), "Malformed arg %s" % k
+    k = k[2:]
+    print locals()
+    assert k in locals(), "Unknown arg %s" % k
+    v = heuristic_cast(v)
+    print "Changing argument %s from default %s to %s" % (k, locals()[k], v)
+    locals()[k] = v
+
 
 if BALANCED:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE * 10
