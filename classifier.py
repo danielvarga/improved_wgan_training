@@ -39,7 +39,8 @@ ACTIVATION_PENALTY = 0.0
 ALPHA_STRATEGY = "real"
 SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
 COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
-LEARNING_RATE_DECAY = False # Uninmplemented yet.
+LEARNING_RATE_DECAY = False
+LEARNING_RATE = 0.1
 AUGMENTATION = "no"
 
 # TARGET_DIGITS = 2, 8
@@ -197,21 +198,30 @@ else:
     weight_loss = tf.constant(0.0)
 loss_list.append(('weight_loss', weight_loss))
 
+global_step = global_step = tf.Variable(0, trainable=False)
+if LEARNING_RATE_DECAY:
+    values = [LEARNING_RATE * v for v in (1.0, 0.1, 0.01)]
+    boundaries = [ITERS//2, 3*ITERS//2]
+    learning_rate = tf.train.piecewise_constant(global_step, boundaries, values)
+else:
+    learning_rate = LEARNING_RATE
+
+
 if DISC_TYPE == "cifarResnet":
     disc_optimizer = tf.train.MomentumOptimizer(
-        learning_rate=0.1,
+        learning_rate=learning_rate,
         momentum=0.9,
         use_nesterov=True
     )
 else:
     disc_optimizer = tf.train.AdamOptimizer(
-        learning_rate=1e-4,
+        learning_rate=learning_rate,
         beta1=0.5,
         beta2=0.9
     )
 
 disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
-disc_train_op = disc_optimizer.apply_gradients(disc_gvs)
+disc_train_op = disc_optimizer.apply_gradients(disc_gvs, global_step=global_step)
 
 
 # Train loop
