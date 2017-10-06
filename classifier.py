@@ -39,6 +39,8 @@ ACTIVATION_PENALTY = 0.0
 ALPHA_STRATEGY = "real"
 SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
 COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
+LEARNING_RATE_DECAY = False # Uninmplemented yet.
+AUGMENTATION = "no"
 
 # TARGET_DIGITS = 2, 8
 # number of elements in one class, total number is twice this:
@@ -71,11 +73,14 @@ for k, v in [arg.split('=', 1) for arg in sys.argv[1:]]:
     assert v != '', "Malformed command line"
     assert k.startswith('--'), "Malformed arg %s" % k
     k = k[2:]
-    print locals()
     assert k in locals(), "Unknown arg %s" % k
     v = heuristic_cast(v)
     print "Changing argument %s from default %s to %s" % (k, locals()[k], v)
     locals()[k] = v
+
+
+assert LEARNING_RATE_DECAY in (True, False)
+assert COMBINE_OUTPUTS_FOR_SLOPES in (True, False)
 
 
 if BALANCED:
@@ -83,7 +88,10 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "classifier-disc_{}-lambda{}-alpha{}-wd{}-lips{}".format(DISC_TYPE, LAMBDA, ALPHA_STRATEGY, WEIGHT_DECAY, LIPSCHITZ_TARGET)
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-aug_{}-bs_{}".format(
+    DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
+    "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n", "y" if LEARNING_RATE_DECAY else "n",
+    AUGMENTATION, BATCH_SIZE)
 
 if BALANCED:
     (X_train, y_train), (X_test, y_test) = data.load_balanced(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
