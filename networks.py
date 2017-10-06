@@ -6,8 +6,24 @@ import tensorflow as tf
 import tflib as lib
 import tflib.ops.layernorm
 
+# from keras.datasets import cifar100
+# from keras.datasets import cifar10
+# from keras.layers import Input, Dense, Layer, Activation, Flatten, Lambda, Add
+# from keras.layers.convolutional import Conv2D, AveragePooling2D
+# from keras.layers.normalization import BatchNormalization
+# from keras.models import Model
+# from keras.optimizers import SGD
+# from keras.regularizers import l2
+# from keras.callbacks import Callback, LearningRateScheduler, TensorBoard
+# from keras.preprocessing.image import ImageDataGenerator
+# from keras.utils import np_utils
+# import keras.backend as K
+
 FUSED=False
 RESNET_BLOCKS_PER_LAYER = 2
+
+counter = 0
+
 
 def LeakyReLU(x, alpha=0.2):
     return tf.maximum(alpha*x, x)
@@ -20,7 +36,7 @@ def Normalize(name, axes, inputs):
     else:
         return lib.ops.batchnorm.Batchnorm(name,axes,inputs,fused=FUSED)
 
-def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None):
+def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None):
 
     CHANNEL = INPUT_SHAPE[0]
     
@@ -77,14 +93,130 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, DO_BATCHNORM=False, OUTPU
             output = tf.reshape(output / 5., [-1])
         return output
 
+    def DenseDiscriminator(inputs):
+        input_dim = np.prod(INPUT_SHAPE)
+        output = tf.reshape(inputs, [-1, input_dim])
+
+        output = lib.ops.linear.Linear('Discriminator.1', input_dim, 1000, output)
+        output = LeakyReLU(output)
+        output = lib.ops.linear.Linear('Discriminator.2', 1000, 1000, output)
+        output = LeakyReLU(output)
+        output = lib.ops.linear.Linear('Discriminator.output', 1000, OUTPUT_COUNT, output)
+        return output
+
+    def CifarResnet(inputs):
+
+        N = 3
+        filter_num_config = [16, 32, 64]
+        wideness = 1
+        filter_num_config = [wideness * i for i in filter_num_config]
+
+        def residual_drop(x, input_shape, output_shape, strides=(1, 1)):
+            global counter
+            counter += 1
+
+            nb_filter = output_shape[0]
+
+            output = x
+
+            filter_size = 3
+            output = lib.ops.conv2d.Conv2D("Discriminator.{}.1".format(counter), input_dim=input_shape[0], output_dim=nb_filter, filter_size=filter_size, inputs=output, stride=strides[0], weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+            if DO_BATCHNORM:
+                output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.1".format(counter), [0,2,3], output, fused=FUSED)
+            output = LeakyReLU(output, alpha=0.0)
+
+            output = lib.ops.conv2d.Conv2D("Discriminator.{}.2".format(counter), nb_filter, nb_filter, filter_size, output, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+            if DO_BATCHNORM:
+                output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.2".format(counter), [0,2,3], output, fused=FUSED)
+            
+            if strides[0] >= 2:
+                x = tf.contrib.layers.avg_pool2d(x, strides, data_format='NCHW')
+
+            if (output_shape[0] - input_shape[0]) > 0:
+                pad_shape = (BATCH_SIZE,
+                             output_shape[0] - input_shape[0],
+                             output_shape[1],
+                             output_shape[2])
+                padding = tf.zeros(shape=pad_shape)
+                x = tf.concat([x, padding], axis=1)
+
+            output = x + output
+            output = LeakyReLU(output, alpha=0.0)
+
+            return output
+
+
+        def build_net(inputs, filter_num_config, nb_classes=10):
+
+            net = lib.ops.conv2d.Conv2D("Discriminator.{}".format(counter), 3, filter_num_config[0], 3, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+            if DO_BATCHNORM:
+                net = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}".format(counter), [0,2,3], net, fused=FUSED)
+            net = LeakyReLU(net, alpha=0.0)
+
+            for i in range(N):
+                net = residual_drop(net, input_shape=(filter_num_config[0], 32, 32), output_shape=(filter_num_config[0], 32, 32))
+
+            net = residual_drop(
+                net,
+                input_shape=(filter_num_config[0], 32, 32),
+                output_shape=(filter_num_config[1], 16, 16),
+                strides=(2, 2)
+            )
+            for i in range(N - 1):
+                net = residual_drop(
+                    net,
+                    input_shape=(filter_num_config[1], 16, 16),
+                    output_shape=(filter_num_config[1], 16, 16)
+                )
+
+            net = residual_drop(
+                net,
+                input_shape=(filter_num_config[1], 16, 16),
+                output_shape=(filter_num_config[2], 8, 8),
+                strides=(2, 2)
+            )
+            for i in range(N - 1):
+                net = residual_drop(
+                    net,
+                    input_shape=(filter_num_config[2], 8, 8),
+                    output_shape=(filter_num_config[2], 8, 8)
+                )
+
+
+            pool = tf.contrib.layers.avg_pool2d(net, 8, data_format='NCHW')
+            flatten = tf.reshape(pool, [BATCH_SIZE, -1])
+
+            #predictions = lib.ops.linear.Linear('Discriminator.1', input_dim, nb_classes, pool) # wdecay kell
+            predictions = tf.layers.dense(flatten, nb_classes)
+
+	    print("preds")
+            print(predictions.shape)
+            #predictions = tf.nn.softmax(predictions)
+
+            return predictions
+
+        output = tf.reshape(inputs, [-1] + list(INPUT_SHAPE))
+        output = tf.transpose(output, [0, 3, 1, 2])
+
+        print(output.shape)
+        output = build_net(output, filter_num_config=filter_num_config, nb_classes=10)
+        return output
+
+
+
     if disc_type == "conv":
         return Discriminator
     elif disc_type == "resnet":
         return ResnetDiscriminator
+    elif disc_type == "dense":
+        return DenseDiscriminator
+    elif disc_type == "cifarResnet":
+        return CifarResnet
 
 
 
 def BottleneckResidualBlock(name, input_dim, output_dim, filter_size, inputs, resample=None, he_init=True):
+
     """
     resample: None, 'down', or 'up'
     """
@@ -102,7 +234,7 @@ def BottleneckResidualBlock(name, input_dim, output_dim, filter_size, inputs, re
         conv_shortcut = lib.ops.conv2d.Conv2D
         conv_1        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=input_dim,  output_dim=input_dim/2)
         conv_1b       = functools.partial(lib.ops.conv2d.Conv2D, input_dim=input_dim/2,  output_dim=output_dim/2)
-        conv_2        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=input_dim/2, output_dim=output_dim)
+        conv_2        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=output_dim/2, output_dim=output_dim)
 
     else:
         raise Exception('invalid resample value')
