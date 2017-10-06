@@ -111,6 +111,7 @@ real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE, augment=Fal
 
 lib.print_model_settings(locals().copy())
 
+
 Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT)
 
 real_labels = tf.placeholder(tf.uint8, shape=[BATCH_SIZE])
@@ -295,7 +296,7 @@ with tf.Session() as session:
             dev_acc = accuracy(dev_real_disc_outputs, dev_real_labels)
             print "TRAIN ACCURACY", train_acc
             print "DEVEL ACCURACY", dev_acc
-            
+
             lib.plot.plot('dev disc cost', dev_cost)
 
             if iteration % 2500 == 0:
@@ -313,6 +314,7 @@ with tf.Session() as session:
             test_writer.add_summary(dev_summary_loss, iteration)
             test_writer.add_summary(dev_summary_extra, iteration)
             test_writer.add_summary(dev_summary_acc, iteration)
+            sys.stdout.flush()
 
         # Write logs every 100 iters
         if (iteration <= 5) or (iteration % 500 == 0):
