@@ -1,5 +1,6 @@
 import numpy as np
 from keras.datasets import mnist, cifar10
+from keras.preprocessing.image import ImageDataGenerator
 
 def load_raw_data(dataset):
     if dataset == "mnist":
@@ -18,8 +19,8 @@ def load_raw_data(dataset):
     X_train /= 255
     X_test /= 255
 
-    X_train = featurewise_std_normalization(featurewise_center(X_train))
-    X_test = featurewise_std_normalization(featurewise_center(X_test))
+    # X_train = featurewise_std_normalization(featurewise_center(X_train))
+    # X_test = featurewise_std_normalization(featurewise_center(X_test))
 
     return (X_train, y_train), (X_test, y_test)
 
@@ -81,14 +82,40 @@ def generator(data, batch_size, infinity=True):
         if not infinity:
             break
 
-def classifier_generator((xs, ys), batch_size, infinity=True):
+def classifier_generator((xs, ys), batch_size, infinity=True, augment=False):
+    if augment:
+        datagen = ImageDataGenerator(
+            featurewise_center=True,
+            samplewise_center=False,
+            featurewise_std_normalization=True,
+            samplewise_std_normalization=False,
+            zca_whitening=False,
+            rotation_range=0,
+            width_shift_range=0.125,
+            height_shift_range=0.125,
+            horizontal_flip=True,
+            vertical_flip=False)
+        datagen.fit(xs)
+    else:
+        datagen = ImageDataGenerator(
+            featurewise_center=True,
+            samplewise_center=False,
+            featurewise_std_normalization=True,
+            samplewise_std_normalization=False,
+            zca_whitening=False,
+            rotation_range=0,
+            width_shift_range=0.,#0.125,
+            height_shift_range=0.,#0.125,
+            horizontal_flip=False,#True,
+            vertical_flip=False)
+        datagen.fit(xs)
+
     while True:
-        perm = np.random.permutation(len(xs))
-        xs2 = xs[perm]
-        ys2 = ys[perm]
         i = 0
-        while (i+1) * batch_size <= len(xs2):
-            yield (xs2[i * batch_size : (i+1) * batch_size], ys2[i * batch_size : (i+1) * batch_size])
+        gen = datagen.flow(xs, ys, batch_size=batch_size, shuffle=True)
+        while (i+1) * batch_size <= len(xs):
+            x, y = gen.next()
+            yield np.reshape(x, [batch_size, -1]), y
             i += 1
         if not infinity:
             break
