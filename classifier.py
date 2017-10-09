@@ -41,7 +41,10 @@ ALPHA_STRATEGY = "real"
 SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
 COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
 LEARNING_RATE_DECAY = False
-LEARNING_RATE = 0.1
+if LEARNING_RATE_DECAY:
+    LEARNING_RATE = 0.1
+else:
+    LEARNING_RATE = 1e-4
 AUGMENTATION = "no"
 
 # TARGET_DIGITS = 2, 8
