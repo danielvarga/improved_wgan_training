@@ -34,7 +34,7 @@ LIPSCHITZ_TARGET = 1.0
 
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
-ITERS = 10000 # How many iterations to train for
+ITERS = 6000 # How many iterations to train for
 DO_BATCHNORM = True
 ACTIVATION_PENALTY = 0.0
 ALPHA_STRATEGY = "real"
@@ -339,6 +339,14 @@ with tf.Session() as session:
             test_writer.add_summary(dev_summary_loss, iteration)
             test_writer.add_summary(dev_summary_extra, iteration)
             test_writer.add_summary(dev_summary_acc, iteration)
+
+            summary_extra = session.run(
+                [merged_extra_summary_op],
+                feed_dict={
+                    real_data: _real_data[0], real_labels: _real_data[1]}
+            )
+            train_writer.add_summary(summary_extra[0], iteration)
+
             sys.stdout.flush()
 
         # Write logs every 100 iters
