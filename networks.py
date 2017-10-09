@@ -147,7 +147,6 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
 
 
         def build_net(inputs, filter_num_config, nb_classes=10):
-
             net = lib.ops.conv2d.Conv2D("Discriminator.{}".format(counter), 3, filter_num_config[0], 3, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
             if DO_BATCHNORM:
                 net = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}".format(counter), [0,2,3], net, fused=FUSED)
@@ -191,8 +190,6 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
             return predictions
 
         output = tf.reshape(inputs, [-1] + list(INPUT_SHAPE))
-        output = tf.transpose(output, [0, 3, 1, 2])
-
         output = build_net(output, filter_num_config=filter_num_config, nb_classes=10)
         return output
 

@@ -22,6 +22,10 @@ def load_raw_data(dataset):
     # X_train = featurewise_std_normalization(featurewise_center(X_train))
     # X_test = featurewise_std_normalization(featurewise_center(X_test))
 
+    print "Using CHANNELS_FIRST convention!!!"
+    X_train = np.transpose(X_train, axes=(0,3,1,2))
+    X_test = np.transpose(X_test, axes=(0,3,1,2))
+
     return (X_train, y_train), (X_test, y_test)
 
 
@@ -94,7 +98,8 @@ def classifier_generator((xs, ys), batch_size, infinity=True, augment=False):
             width_shift_range=0.125,
             height_shift_range=0.125,
             horizontal_flip=True,
-            vertical_flip=False)
+            vertical_flip=False,
+            data_format="channels_first")
         datagen.fit(xs)
     else:
         datagen = ImageDataGenerator(
@@ -107,7 +112,8 @@ def classifier_generator((xs, ys), batch_size, infinity=True, augment=False):
             width_shift_range=0.,#0.125,
             height_shift_range=0.,#0.125,
             horizontal_flip=False,#True,
-            vertical_flip=False)
+            vertical_flip=False,
+            data_format="channels_first")
         datagen.fit(xs)
 
     while True:

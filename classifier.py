@@ -102,9 +102,6 @@ if BALANCED:
 else:
     (X_train, y_train), (X_test, y_test) = data.load_set(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
 
-if DISC_TYPE in ("conv", "resnet"):
-    X_train = np.transpose(X_train, axes=(0,3,1,2))
-    X_test = np.transpose(X_test, axes=(0,3,1,2))
 INPUT_SHAPE = X_train.shape[1:]
 INPUT_DIM = np.prod(INPUT_SHAPE)
 
