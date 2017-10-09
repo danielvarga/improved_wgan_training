@@ -22,9 +22,6 @@ import tflib.ops.layernorm
 FUSED=False
 RESNET_BLOCKS_PER_LAYER = 2
 
-counter = 0
-
-
 def LeakyReLU(x, alpha=0.2):
     return tf.maximum(alpha*x, x)
 
@@ -111,23 +108,21 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         wideness = 1
         filter_num_config = [wideness * i for i in filter_num_config]
 
-        def residual_drop(x, input_shape, output_shape, strides=(1, 1)):
-            global counter
-            counter += 1
+        def residual_drop(x, input_shape, output_shape, level, block, strides=(1, 1)):
 
             nb_filter = output_shape[0]
 
             output = x
 
             filter_size = 3
-            output = lib.ops.conv2d.Conv2D("Discriminator.{}.1".format(counter), input_dim=input_shape[0], output_dim=nb_filter, filter_size=filter_size, inputs=output, stride=strides[0], weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+            output = lib.ops.conv2d.Conv2D("Discriminator.Lvl{}.Block{}.Conv1".format(level, block), input_dim=input_shape[0], output_dim=nb_filter, filter_size=filter_size, inputs=output, stride=strides[0], weight_noise_sigma=WEIGHT_NOISE_SIGMA)
             if DO_BATCHNORM:
-                output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.1".format(counter), [0,2,3], output, fused=FUSED)
+                output = lib.ops.batchnorm.Batchnorm("Discriminator.Lvl{}.Block{}.BN1".format(level, block), [0,2,3], output, fused=FUSED)
             output = LeakyReLU(output, alpha=0.0)
 
-            output = lib.ops.conv2d.Conv2D("Discriminator.{}.2".format(counter), nb_filter, nb_filter, filter_size, output, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+            output = lib.ops.conv2d.Conv2D("Discriminator.Lvl{}.Block{}.Conv2".format(level, block), nb_filter, nb_filter, filter_size, output, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
             if DO_BATCHNORM:
-                output = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}.2".format(counter), [0,2,3], output, fused=FUSED)
+                output = lib.ops.batchnorm.Batchnorm("Discriminator.Lvl{}.Block{}.BN2".format(level, block), [0,2,3], output, fused=FUSED)
 
             if strides[0] >= 2:
                 x = tf.contrib.layers.avg_pool2d(x, strides, data_format='NCHW')
@@ -147,45 +142,49 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
 
 
         def build_net(inputs, filter_num_config, nb_classes=10):
-            net = lib.ops.conv2d.Conv2D("Discriminator.{}".format(counter), 3, filter_num_config[0], 3, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+            net = lib.ops.conv2d.Conv2D("Discriminator.Lvl0.Conv0", 3, filter_num_config[0], 3, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
             if DO_BATCHNORM:
-                net = lib.ops.batchnorm.Batchnorm("Discriminator.BN{}".format(counter), [0,2,3], net, fused=FUSED)
+                net = lib.ops.batchnorm.Batchnorm("Discriminator.Lvl0.BN0", [0,2,3], net, fused=FUSED)
             net = LeakyReLU(net, alpha=0.0)
 
             for i in range(N):
-                net = residual_drop(net, input_shape=(filter_num_config[0], 32, 32), output_shape=(filter_num_config[0], 32, 32))
+                net = residual_drop(net, input_shape=(filter_num_config[0], 32, 32), output_shape=(filter_num_config[0], 32, 32), level=1, block=i)
 
             net = residual_drop(
                 net,
                 input_shape=(filter_num_config[0], 32, 32),
                 output_shape=(filter_num_config[1], 16, 16),
+                level=2, block=0,
                 strides=(2, 2)
             )
-            for i in range(N - 1):
+            for i in range(1, N):
                 net = residual_drop(
                     net,
                     input_shape=(filter_num_config[1], 16, 16),
-                    output_shape=(filter_num_config[1], 16, 16)
+                    output_shape=(filter_num_config[1], 16, 16),
+                    level=2, block=i
                 )
 
             net = residual_drop(
                 net,
                 input_shape=(filter_num_config[1], 16, 16),
                 output_shape=(filter_num_config[2], 8, 8),
+                level=3, block=0,
                 strides=(2, 2)
             )
-            for i in range(N - 1):
+            for i in range(1,N):
                 net = residual_drop(
                     net,
                     input_shape=(filter_num_config[2], 8, 8),
-                    output_shape=(filter_num_config[2], 8, 8)
+                    output_shape=(filter_num_config[2], 8, 8),
+                    level=3, block=i
                 )
 
 
             pool = tf.contrib.layers.avg_pool2d(net, 8, data_format='NCHW')
             flatten = tf.reshape(pool, [BATCH_SIZE, -1])
 
-            predictions = lib.ops.linear.Linear('Discriminator.1', flatten.get_shape().as_list()[1], nb_classes, flatten)
+            predictions = lib.ops.linear.Linear('Discriminator.Linear', flatten.get_shape().as_list()[1], nb_classes, flatten)
 
             return predictions
 
