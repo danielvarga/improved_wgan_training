@@ -3,7 +3,16 @@ import tflib as lib
 import numpy as np
 import tensorflow as tf
 
-def Batchnorm(name, axes, inputs, is_training=None, stats_iter=None, update_moving_stats=True, fused=True):
+
+def Batchnorm_with_reuse(*args, **kwargs):
+    print("Using tflib batchnormalization with reuse.")
+    with tf.name_scope(args[0]):
+        return Batchnorm_orig(*args, **kwargs)
+
+def Batchnorm(*args, **kwargs):
+    return Batchnorm_orig(*args, **kwargs)
+
+def Batchnorm_orig(name, axes, inputs, is_training=None, stats_iter=None, update_moving_stats=True, fused=True):
     if ((axes == [0,2,3]) or (axes == [0,2])) and fused==True:
         if axes==[0,2]:
             inputs = tf.expand_dims(inputs, 3)
