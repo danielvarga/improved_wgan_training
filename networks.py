@@ -128,7 +128,7 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
                 output = lib.ops.batchnorm.Batchnorm("Discriminator.Lvl{}.Block{}.BN2".format(level, block), [0,2,3], output, fused=FUSED)
 
             if strides[0] >= 2:
-                x = tf.contrib.layers.avg_pool2d(x, strides, data_format='NCHW')
+                x = tf.contrib.layers.avg_pool2d(x, kernel_size=strides, stride=strides, data_format='NCHW')
 
             if (output_shape[0] - input_shape[0]) > 0:
                 pad_shape = (BATCH_SIZE,
@@ -184,7 +184,7 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
                 )
 
 
-            pool = tf.contrib.layers.avg_pool2d(net, 8, data_format='NCHW')
+            pool = tf.contrib.layers.avg_pool2d(net, kernel_size=8, stride=8, data_format='NCHW')
             flatten = tf.reshape(pool, [BATCH_SIZE, -1])
 
             predictions = lib.ops.linear.Linear('Discriminator.Linear', flatten.get_shape().as_list()[1], nb_classes, flatten)
