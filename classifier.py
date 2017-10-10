@@ -27,6 +27,7 @@ import data
 import networks
 import gan_logging
 
+
 LAMBDA = 0 # 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY = 0
 GRADIENT_SHRINKING = False
@@ -116,7 +117,7 @@ real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE, augment=Fal
 lib.print_model_settings(locals().copy())
 
 
-Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT)
+Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT, REUSE_BATCHNORM=True)
 
 real_labels = tf.placeholder(tf.uint8, shape=[BATCH_SIZE])
 real_labels_onehot = tf.one_hot(real_labels, 10)

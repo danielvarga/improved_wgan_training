@@ -33,10 +33,13 @@ def Normalize(name, axes, inputs):
     else:
         return lib.ops.batchnorm.Batchnorm(name,axes,inputs,fused=FUSED)
 
-def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None):
+def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None, REUSE_BATCHNORM=False):
 
     CHANNEL = INPUT_SHAPE[0]
-    
+
+    if REUSE_BATCHNORM:
+        lib.ops.batchnorm.Batchnorm = lib.ops.batchnorm.Batchnorm_with_reuse
+
     def Discriminator(inputs):
         output = tf.reshape(inputs, [-1] + list(INPUT_SHAPE))
 
