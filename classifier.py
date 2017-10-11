@@ -178,8 +178,10 @@ disc_cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
 loss_list.append(('xent_loss', disc_cost))
 
 if LAMBDA > 0:
-    gradient_penalty = tf.reduce_mean(tf.maximum(1.0, slopes/LIPSCHITZ_TARGET)**2)
-#    gradient_penalty = tf.reduce_mean((slopes-1)**4)
+    #    gradient_penalty = tf.reduce_mean(tf.maximum(1.0, slopes/LIPSCHITZ_TARGET)**2)
+    gradient_penalty = tf.reduce_mean(tf.maximum(0.0, slopes/LIPSCHITZ_TARGET - 1)**2)
+    #    gradient_penalty = tf.reduce_mean(slopes**2)
+    #    gradient_penalty = tf.reduce_mean((slopes/LIPSCHITZ_TARGET-1)**2)
     disc_cost += LAMBDA*gradient_penalty
     loss_list.append(('gradient_penalty', gradient_penalty))
 
