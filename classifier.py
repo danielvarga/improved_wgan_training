@@ -56,6 +56,7 @@ BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit clas
 OUTPUT_COUNT = 10
 DATASET="cifar10" # cifar10 / mnist
 DISC_TYPE = "cifarResnet" # "conv" / "resnet" / "dense" / "cifarResnet"
+GP_VERSION = 2
 
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
@@ -94,11 +95,13 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-aug_{}-bs_{}-bn_{}-ts_{}".format(
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n", "y" if LEARNING_RATE_DECAY else "n",
     AUGMENTATION, BATCH_SIZE,
     "y" if DO_BATCHNORM else "n",
+    GP_VERSION,
+    "y" if GRADIENT_SHRINKING else "n",
     time.strftime('%Y%m%d-%H%M%S'))
 
 if BALANCED:
@@ -178,10 +181,17 @@ disc_cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
 loss_list.append(('xent_loss', disc_cost))
 
 if LAMBDA > 0:
-    #    gradient_penalty = tf.reduce_mean(tf.maximum(1.0, slopes/LIPSCHITZ_TARGET)**2)
-    gradient_penalty = tf.reduce_mean(tf.maximum(0.0, slopes/LIPSCHITZ_TARGET - 1)**2)
-    #    gradient_penalty = tf.reduce_mean(slopes**2)
-    #    gradient_penalty = tf.reduce_mean((slopes/LIPSCHITZ_TARGET-1)**2)
+    if GP_VERSION == 1:
+        gradient_penalty = tf.reduce_mean(tf.maximum(1.0, slopes/LIPSCHITZ_TARGET)**2)
+    elif GP_VERSION == 2:
+        gradient_penalty = tf.reduce_mean(tf.maximum(0.0, slopes/LIPSCHITZ_TARGET - 1)**2)
+    elif GP_VERSION == 3:
+        gradient_penalty = tf.reduce_mean(slopes**2)
+    elif GP_VERSION == 4:
+        gradient_penalty = tf.reduce_mean((slopes/LIPSCHITZ_TARGET-1)**2)
+    else:
+        assert False, "Unrecognised GP_VERSION"
+
     disc_cost += LAMBDA*gradient_penalty
     loss_list.append(('gradient_penalty', gradient_penalty))
 
