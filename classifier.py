@@ -205,7 +205,7 @@ loss_list.append(('weight_loss', weight_loss))
 global_step = global_step = tf.Variable(0, trainable=False)
 if LEARNING_RATE_DECAY:
     values = [LEARNING_RATE * v for v in (1.0, 0.1, 0.01)]
-    boundaries = [ITERS//2, 3*ITERS//2]
+    boundaries = [ITERS//2, 3*ITERS//4]
     learning_rate = tf.train.piecewise_constant(global_step, boundaries, values)
 else:
     learning_rate = LEARNING_RATE
