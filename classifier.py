@@ -95,9 +95,10 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-ts_{}".format(
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n", "y" if LEARNING_RATE_DECAY else "n",
+    LEARNING_RATE,
     AUGMENTATION, BATCH_SIZE,
     "y" if DO_BATCHNORM else "n",
     GP_VERSION,
