@@ -274,7 +274,7 @@ with tf.Session() as session:
             extra_summaries.append(tf.summary.histogram(var.name + "/gradients", grad))
     extra_summaries.append(tf.summary.histogram("slopes", slopes))
     extra_summaries.append(tf.summary.scalar("grad_norm", grad_norm))
-    extra_summaries.append(tf.summary.scalar("real_plus_noise_slopes", real_plus_noise_slopes))
+    extra_summaries.append(tf.summary.histogram("real_plus_noise_slopes", real_plus_noise_slopes))
     merged_extra_summary_op = tf.summary.merge(extra_summaries)
 
 #    merged_summary_op = tf.summary.merge_all()
