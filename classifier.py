@@ -39,7 +39,7 @@ ITERS = 10000 # How many iterations to train for
 DO_BATCHNORM = True
 ACTIVATION_PENALTY = 0.0
 ALPHA_STRATEGY = "real"
-SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
+SHRINKING_REDUCTOR = "logsum" # "none", "max", "mean", "logsum"
 COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
 LEARNING_RATE_DECAY = False
 if LEARNING_RATE_DECAY:
@@ -48,15 +48,18 @@ else:
     LEARNING_RATE = 1e-4
 AUGMENTATION = "no"
 
-# TARGET_DIGITS = 2, 8
-# number of elements in one class, total number is twice this:
 TRAIN_DATASET_SIZE = 2000
 TEST_DATASET_SIZE = 10000
 BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 OUTPUT_COUNT = 10
 DATASET="cifar10" # cifar10 / mnist
 DISC_TYPE = "cifarResnet" # "conv" / "resnet" / "dense" / "cifarResnet"
-GP_VERSION = 2
+
+# Note that L2 ignores LIPSCHITZ_TARGET, while in all the PARABOLA versions
+# slope is first divided by LIPSCHITZ_TARGET.
+STEEP_HALF_PARABOLA, GENTLE_HALF_PARABOLA, L2, PARABOLA = 1, 2, 3, 4
+GP_VERSION = GENTLE_HALF_PARABOLA
+
 
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
@@ -185,13 +188,13 @@ disc_cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
 loss_list.append(('xent_loss', disc_cost))
 
 if LAMBDA > 0:
-    if GP_VERSION == 1:
+    if GP_VERSION == STEEP_HALF_PARABOLA:
         gradient_penalty = tf.reduce_mean(tf.maximum(1.0, slopes/LIPSCHITZ_TARGET)**2)
-    elif GP_VERSION == 2:
+    elif GP_VERSION == GENTLE_HALF_PARABOLA:
         gradient_penalty = tf.reduce_mean(tf.maximum(0.0, slopes/LIPSCHITZ_TARGET - 1)**2)
-    elif GP_VERSION == 3:
+    elif GP_VERSION == L2:
         gradient_penalty = tf.reduce_mean(slopes**2)
-    elif GP_VERSION == 4:
+    elif GP_VERSION == PARABOLA:
         gradient_penalty = tf.reduce_mean((slopes/LIPSCHITZ_TARGET-1)**2)
     else:
         assert False, "Unrecognised GP_VERSION"
