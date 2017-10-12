@@ -79,6 +79,6 @@ def get_slope_samples(real_data, fake_data, alpha_strategy, SUB_BATCH_SIZE):
             differences = fake_data - real_data
             interpolates = real_data + (alpha*differences)
             if alpha_strategy == "real_plus_noise":
-                        interpolates += tf.random_normal(shape=fake_data.shape, stddev=0.1)
+                        interpolates += tf.random_normal(shape=fake_data.shape, stddev=0.2)
 
             return interpolates

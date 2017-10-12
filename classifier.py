@@ -160,6 +160,9 @@ assert ALPHA_STRATEGY in ("real", "random", "real_plus_noise"), "In the discimin
 interpolates = losses.get_slope_samples(real_data, real_data, ALPHA_STRATEGY, BATCH_SIZE)
 slopes = get_slopes(interpolates)
 
+real_plus_noise_points = losses.get_slope_samples(real_data, real_data, "real_plus_noise",  BATCH_SIZE)
+real_plus_noise_slopes = get_slopes(real_plus_noise_points)
+
 if SHRINKING_REDUCTOR == "mean":
     grad_norm = tf.reduce_mean(slopes)
 elif SHRINKING_REDUCTOR == "max":
@@ -271,6 +274,7 @@ with tf.Session() as session:
             extra_summaries.append(tf.summary.histogram(var.name + "/gradients", grad))
     extra_summaries.append(tf.summary.histogram("slopes", slopes))
     extra_summaries.append(tf.summary.scalar("grad_norm", grad_norm))
+    extra_summaries.append(tf.summary.scalar("real_plus_noise_slopes", real_plus_noise_slopes))
     merged_extra_summary_op = tf.summary.merge(extra_summaries)
 
 #    merged_summary_op = tf.summary.merge_all()
