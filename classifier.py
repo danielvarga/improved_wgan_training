@@ -160,17 +160,17 @@ assert ALPHA_STRATEGY in ("real", "random", "real_plus_noise"), "In the discimin
 interpolates = losses.get_slope_samples(real_data, real_data, ALPHA_STRATEGY, BATCH_SIZE)
 slopes = get_slopes(interpolates)
 
+if SHRINKING_REDUCTOR == "mean":
+    grad_norm = tf.reduce_mean(slopes)
+elif SHRINKING_REDUCTOR == "max":
+    grad_norm = tf.reduce_max(slopes)
+elif SHRINKING_REDUCTOR == "logsum":
+    grad_norm = tf.reduce_logsumexp(slopes)
+elif SHRINKING_REDUCTOR == "none":
+    grad_norm = slopes
+
 if GRADIENT_SHRINKING:
     print "gradient shrinking"
-    if SHRINKING_REDUCTOR == "mean":
-        grad_norm = tf.reduce_mean(slopes)
-    elif SHRINKING_REDUCTOR == "max":
-        grad_norm = tf.reduce_max(slopes)
-    elif SHRINKING_REDUCTOR == "logsum":
-        grad_norm = tf.reduce_logsumexp(slopes)
-    elif SHRINKING_REDUCTOR == "none":
-        grad_norm = slopes
-
     disc_real /= grad_norm
     disc_real *= LIPSCHITZ_TARGET
 
@@ -270,6 +270,7 @@ with tf.Session() as session:
         if grad is not None:
             extra_summaries.append(tf.summary.histogram(var.name + "/gradients", grad))
     extra_summaries.append(tf.summary.histogram("slopes", slopes))
+    extra_summaries.append(tf.summary.scalar("grad_norm", grad_norm))
     merged_extra_summary_op = tf.summary.merge(extra_summaries)
 
 #    merged_summary_op = tf.summary.merge_all()
