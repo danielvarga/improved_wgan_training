@@ -14,19 +14,14 @@ import seaborn as sns
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("rootdir", help="Folder containing the logs")
-parser.add_argument("x_key", help="What will be on the x axis")
-parser.add_argument("y_key", help="What will be on the y axis")
-parser.add_argument("z_key", help="What will be on the color axis")
-parser.add_argument("--regexp", type=str, help="Regexp to match folder name")
-parser.add_argument("--outfile_prefix", type=str, help="Regexp to match folder name")
-parser.add_argument("--vmin", type=float, help="Min colored value on map")
-parser.add_argument("--vmax", type=float, help="Max colored value on map")
+parser.add_argument("x_key", help="Key for x axis")
+parser.add_argument("y_key", help="Key for y axis")
+parser.add_argument("z_key", help="Key for the color axis")
+parser.add_argument("--regexp", type=str, help="Only regexp matched folder names will be parsed")
+parser.add_argument("--outfile_prefix", type=str, help="Prepends outoup filename with given string")
+parser.add_argument("--vmin", type=float, help="Min colored value on the heatmap")
+parser.add_argument("--vmax", type=float, help="Max colored value on the heatmap")
 args = parser.parse_args()
-
-
-if len(sys.argv) < 5:
-    print("Usage: {0} x_key y_key z_key [regexp_to_match] [outfile_prefix]".format(sys.argv[0]))
-    quit()
 
 rootdir = args.rootdir
 x_key = args.x_key
