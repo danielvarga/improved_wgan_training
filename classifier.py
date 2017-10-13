@@ -55,7 +55,7 @@ TEST_DATASET_SIZE = 10000
 BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 OUTPUT_COUNT = 10
 DATASET="cifar10" # cifar10 / mnist
-DISC_TYPE = "cifarResnet" # "conv" / "resnet" / "dense" / "cifarResnet"
+DISC_TYPE = "cifarResnet" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet"
 
 # Note that L2 ignores LIPSCHITZ_TARGET, while in all the PARABOLA versions
 # slope is first divided by LIPSCHITZ_TARGET.
