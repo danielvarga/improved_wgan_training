@@ -44,8 +44,10 @@ ALPHA_STRATEGY = "real"
 SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
 COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
 LEARNING_RATE_DECAY = False
-if LEARNING_RATE_DECAY:
+if LEARNING_RATE_DECAY == "piecewise":
     LEARNING_RATE = 0.1
+elif LEARNING_RATE_DECAY == "exponential":
+    LEARNING_RATE = 0.001
 else:
     LEARNING_RATE = 1e-4
 AUGMENTATION = "no"
@@ -92,7 +94,7 @@ for k, v in [arg.split('=', 1) for arg in sys.argv[1:]]:
     locals()[k] = v
 
 
-assert LEARNING_RATE_DECAY in (True, False)
+assert LEARNING_RATE_DECAY in ("piecewise", "exponential", False)
 assert COMBINE_OUTPUTS_FOR_SLOPES in (True, False)
 
 
@@ -103,7 +105,8 @@ else:
 
 SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
-    "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n", "y" if LEARNING_RATE_DECAY else "n",
+    "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n",
+    "n" if not LEARNING_RATE_DECAY else LEARNING_RATE_DECAY,
     LEARNING_RATE,
     AUGMENTATION, BATCH_SIZE,
     "y" if DO_BATCHNORM else "n",
@@ -227,10 +230,12 @@ else:
 loss_list.append(('weight_loss', weight_loss))
 
 global_step = global_step = tf.Variable(0, trainable=False)
-if LEARNING_RATE_DECAY:
+if LEARNING_RATE_DECAY == "piecewise":
     values = [LEARNING_RATE * v for v in (1.0, 0.1, 0.01)]
     boundaries = [ITERS//2, 3*ITERS//4]
     learning_rate = tf.train.piecewise_constant(global_step, boundaries, values)
+elif LEARNING_RATE_DECAY == "exponential":
+    learning_rate = tf.train.exponential_decay(LEARNING_RATE, global_step, 1000, 0.9, staircase=False)
 else:
     learning_rate = LEARNING_RATE
 
