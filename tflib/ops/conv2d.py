@@ -17,7 +17,7 @@ def unset_weights_stdev():
     global _weights_stdev
     _weights_stdev = None
 
-def Conv2D(name, input_dim, output_dim, filter_size, inputs, he_init=True, mask_type=None, stride=1, weightnorm=None, biases=True, gain=1., weight_noise_sigma=None):
+def Conv2D(name, input_dim, output_dim, filter_size, inputs, he_init=True, mask_type=None, stride=1, weightnorm=None, biases=True, gain=1., weight_noise_sigma=None, padding='SAME'):
     """
     inputs: tensor of shape (batch size, num channels, height, width)
     mask_type: one of None, 'a', 'b'
@@ -109,7 +109,7 @@ def Conv2D(name, input_dim, output_dim, filter_size, inputs, he_init=True, mask_
             input=inputs, 
             filter=filters, 
             strides=[1, 1, stride, stride],
-            padding='SAME',
+            padding=padding,
             data_format='NCHW'
         )
 
