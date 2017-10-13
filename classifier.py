@@ -142,7 +142,7 @@ else:
 
 
 
-disc_filters = [param for param_name, param in lib._params.iteritems() if param_name.endswith("Filters") or param_name.endswith("Output.W") or param_name.endswith("Linear.W")]
+disc_filters = [param for param_name, param in lib._params.iteritems() if param_name.endswith("Filters") or param_name.endswith("W")]
 # filter_param_count = np.sum([np.prod(param.shape) for param in disc_filters])
 # param_count = np.sum([np.prod(param.shape) for param_name, param in lib._params.iteritems()])
 # param_count2 = np.sum([np.prod(param.shape) for param in tf.trainable_variables()])
