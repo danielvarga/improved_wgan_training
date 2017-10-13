@@ -39,7 +39,7 @@ ITERS = 10000 # How many iterations to train for
 DO_BATCHNORM = True
 ACTIVATION_PENALTY = 0.0
 ALPHA_STRATEGY = "real"
-SHRINKING_REDUCTOR = "logsum" # "none", "max", "mean", "logsum"
+SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
 COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
 LEARNING_RATE_DECAY = False
 if LEARNING_RATE_DECAY:
