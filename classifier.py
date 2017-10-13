@@ -28,6 +28,8 @@ import networks
 import gan_logging
 
 
+
+
 LAMBDA = 0 # 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY = 0
 GRADIENT_SHRINKING = False
@@ -59,6 +61,7 @@ DISC_TYPE = "cifarResnet" # "conv" / "resnet" / "dense" / "cifarResnet"
 # slope is first divided by LIPSCHITZ_TARGET.
 STEEP_HALF_PARABOLA, GENTLE_HALF_PARABOLA, L2, PARABOLA = 1, 2, 3, 4
 GP_VERSION = GENTLE_HALF_PARABOLA
+MEMORY_SHARE=1.0
 
 
 def heuristic_cast(s):
@@ -139,8 +142,10 @@ else:
 
 
 
-disc_filters = [param for param_name, param in lib._params.iteritems() if param_name.startswith("Discriminator") and param_name.endswith("Filters")]
+disc_filters = [param for param_name, param in lib._params.iteritems() if param_name.endswith("Filters") or param_name.endswith("Output.W") or param_name.endswith("Linear.W")]
+# filter_param_count = np.sum([np.prod(param.shape) for param in disc_filters])
 # param_count = np.sum([np.prod(param.shape) for param_name, param in lib._params.iteritems()])
+# param_count2 = np.sum([np.prod(param.shape) for param in tf.trainable_variables()])
 
 
 def activation_to_loss(activation):
@@ -248,7 +253,9 @@ disc_train_op = disc_optimizer.apply_gradients(disc_gvs, global_step=global_step
 
 
 # Train loop
-with tf.Session() as session:
+config = tf.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = MEMORY_SHARE
+with tf.Session(config=config) as session:
 
     # classifier is supposed to give maximal value to its true label
     def accuracy(_disc_real, _label_real):
