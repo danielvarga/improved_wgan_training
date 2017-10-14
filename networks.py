@@ -199,21 +199,23 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
 
         inputs = tf.reshape(inputs, [-1, 1, 28, 28])
 
-        net = lib.ops.conv2d.Conv2D("Discriminator.Conv0", 1, 32, 5, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='SAME')
-        net = tf.nn.relu(net)
+        le_wideness = 1
+
+        net = lib.ops.conv2d.Conv2D("Discriminator.Conv0", 1, le_wideness * 32, 5, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='SAME')
+        net = LeakyReLU(net, alpha=0)
         net = tf.nn.max_pool(net, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
 
-        net = lib.ops.conv2d.Conv2D("Discriminator.Conv1", 32, 64, 5, net, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='VALID')
-        net = tf.nn.relu(net)
+        net = lib.ops.conv2d.Conv2D("Discriminator.Conv1", le_wideness * 32, le_wideness * 64, 5, net, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='VALID')
+        net = LeakyReLU(net, alpha=0)
         net = tf.nn.max_pool(net, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
 
-        net = lib.ops.conv2d.Conv2D("Discriminator.Conv2", 64, 120, 5, net, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='VALID')
-        net = tf.nn.relu(net)
+        net = lib.ops.conv2d.Conv2D("Discriminator.Conv2", le_wideness * 64, 120, 5, net, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='VALID')
+        net = LeakyReLU(net, alpha=0)
 
         net = tf.reshape(net,[-1,120])
 
         net = lib.ops.linear.Linear('Discriminator.Linear1', 120, 84, net)
-        net = tf.nn.relu(net)
+        net = LeakyReLU(net, alpha=0)
 
         #dropout1 = tf.placeholder("float")
         #net = tf.nn.dropout(net, dropout1)
