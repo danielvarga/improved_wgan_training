@@ -40,7 +40,7 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
     if REUSE_BATCHNORM:
         lib.ops.batchnorm.Batchnorm = lib.ops.batchnorm.Batchnorm_with_reuse
 
-    def Discriminator(inputs):
+    def ConvDiscriminator(inputs):
         output = tf.reshape(inputs, [-1] + list(INPUT_SHAPE))
 
         output = lib.ops.conv2d.Conv2D('Discriminator.1',CHANNEL,DIM,5,output,stride=2, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
@@ -61,6 +61,33 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
             output = lib.ops.linear.Linear('Discriminator.Output', 4*4*4*DIM, OUTPUT_COUNT, output)
         else:
             output = lib.ops.linear.Linear('Discriminator.Output', 4*4*4*DIM, 1, output)
+            output = tf.reshape(output, [-1])
+        return output
+
+    def ConvDiscriminator2(inputs):
+        output = tf.reshape(inputs, [-1] + list(INPUT_SHAPE))
+
+        output = lib.ops.conv2d.Conv2D('Discriminator.1',CHANNEL,DIM,5,output,stride=1, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+        output = LeakyReLU(output)
+        output = tf.nn.max_pool(output, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
+
+        output = lib.ops.conv2d.Conv2D('Discriminator.2', DIM, 2*DIM, 5, output, stride=1, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+        if DO_BATCHNORM:
+            output = lib.ops.batchnorm.Batchnorm('Discriminator.BN2', [0,2,3], output, fused=FUSED)
+        output = LeakyReLU(output)
+        output = tf.nn.max_pool(output, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
+
+        output = lib.ops.conv2d.Conv2D('Discriminator.3', 2*DIM, 4*DIM, 5, output, stride=1, weight_noise_sigma=WEIGHT_NOISE_SIGMA)
+        if DO_BATCHNORM:
+            output = lib.ops.batchnorm.Batchnorm('Discriminator.BN3', [0,2,3], output, fused=FUSED)
+        output = LeakyReLU(output)
+        output = tf.nn.max_pool(output, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
+
+        output = tf.reshape(output, [-1, 3*3*4*DIM])
+        if OUTPUT_COUNT > 1:
+            output = lib.ops.linear.Linear('Discriminator.Output', 3*3*4*DIM, OUTPUT_COUNT, output)
+        else:
+            output = lib.ops.linear.Linear('Discriminator.Output', 3*3*4*DIM, 1, output)
             output = tf.reshape(output, [-1])
         return output
 
@@ -97,11 +124,11 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         input_dim = np.prod(INPUT_SHAPE)
         output = tf.reshape(inputs, [-1, input_dim])
 
-        output = lib.ops.linear.Linear('Discriminator.1', input_dim, 1000, output)
-        output = LeakyReLU(output)
-        output = lib.ops.linear.Linear('Discriminator.2', 1000, 1000, output)
-        output = LeakyReLU(output)
-        output = lib.ops.linear.Linear('Discriminator.output', 1000, OUTPUT_COUNT, output)
+        output = lib.ops.linear.Linear('Discriminator.1', input_dim, 1024, output)
+        output = LeakyReLU(output, alpha=0.0)
+        output = lib.ops.linear.Linear('Discriminator.2', 1024, 1024, output)
+        output = LeakyReLU(output, alpha=0.0)
+        output = lib.ops.linear.Linear('Discriminator.output', 1024, OUTPUT_COUNT, output)
         return output
 
     def CifarResnet(inputs):
@@ -231,7 +258,9 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
 
 
     if disc_type == "conv":
-        return Discriminator
+        return ConvDiscriminator
+    elif disc_type =="conv2":
+        return ConvDiscriminator2
     elif disc_type == "resnet":
         return ResnetDiscriminator
     elif disc_type == "dense":
