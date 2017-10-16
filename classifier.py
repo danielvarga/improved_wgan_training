@@ -63,7 +63,7 @@ DISC_TYPE = "cifarResnet" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet
 # slope is first divided by LIPSCHITZ_TARGET.
 STEEP_HALF_PARABOLA, GENTLE_HALF_PARABOLA, L2, PARABOLA = 1, 2, 3, 4
 GP_VERSION = GENTLE_HALF_PARABOLA
-MEMORY_SHARE=1.0
+MEMORY_SHARE=0.95
 
 
 def heuristic_cast(s):
