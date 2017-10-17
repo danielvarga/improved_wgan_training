@@ -65,6 +65,8 @@ STEEP_HALF_PARABOLA, GENTLE_HALF_PARABOLA, L2, PARABOLA = 1, 2, 3, 4
 GP_VERSION = GENTLE_HALF_PARABOLA
 MEMORY_SHARE=0.95
 
+COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax"
+DATAGRAD = 0
 
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
@@ -157,8 +159,19 @@ def activation_to_loss(activation):
 def get_slopes(input):
     output = Discriminator(input)
     if COMBINE_OUTPUTS_FOR_SLOPES:
-        output_weights = tf.random_normal((OUTPUT_COUNT,))
-        gradients = tf.gradients(output * output_weights, [input])[0]
+        if COMBINE_OUTPUTS_MODE == "random":
+            output_weights = tf.random_normal((OUTPUT_COUNT,))
+            gradients = tf.gradients(output * output_weights, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "softmax":
+            softmaxed = tf.nn.softmax(output)
+            # cond = tf.greater(softmaxed, 0.01)
+            # gradients = tf.gradients(output * tf.where(cond, softmaxed, 0.0*softmaxed), [input])[0]
+            gradients = tf.gradients(output * softmaxed, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "onehot":
+            gradients = tf.gradients(output * real_labels_onehot, [input])[0]
+        else:
+            assert False, "Not supported COMBINE_OUTPUTS_MODE: " + COMBINE_OUTPUTS_MODE
+
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     else:
         jacobians = util.jacobian_by_batch(output, input)
@@ -189,10 +202,14 @@ if GRADIENT_SHRINKING:
     disc_real *= LIPSCHITZ_TARGET
 
 softmax_output = tf.nn.softmax(disc_real)
-disc_cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+xent_loss = tf.nn.softmax_cross_entropy_with_logits(
     logits=disc_real,
     labels=real_labels_onehot
-))
+)
+datagrad_term = tf.reduce_sum(tf.square(tf.gradients(xent_loss, [real_data])[0]), axis=1)
+
+disc_cost = tf.reduce_mean(xent_loss + DATAGRAD * datagrad_term)
+
 loss_list.append(('xent_loss', disc_cost))
 
 if LAMBDA > 0:
