@@ -36,6 +36,8 @@ def Normalize(name, axes, inputs):
 def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None, REUSE_BATCHNORM=False):
 
     CHANNEL = INPUT_SHAPE[0]
+    assert INPUT_SHAPE[1] == INPUT_SHAPE[2]
+    WIDTH = INPUT_SHAPE[2]
 
     if REUSE_BATCHNORM:
         lib.ops.batchnorm.Batchnorm = lib.ops.batchnorm.Batchnorm_with_reuse
@@ -83,11 +85,13 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         output = LeakyReLU(output)
         output = tf.nn.max_pool(output, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
 
-        output = tf.reshape(output, [-1, 3*3*4*DIM])
+        w = WIDTH // (2 * 2 * 2)
+
+        output = tf.reshape(output, [-1, w*w*4*DIM])
         if OUTPUT_COUNT > 1:
-            output = lib.ops.linear.Linear('Discriminator.Output', 3*3*4*DIM, OUTPUT_COUNT, output)
+            output = lib.ops.linear.Linear('Discriminator.Output', w*w*4*DIM, OUTPUT_COUNT, output)
         else:
-            output = lib.ops.linear.Linear('Discriminator.Output', 3*3*4*DIM, 1, output)
+            output = lib.ops.linear.Linear('Discriminator.Output', w*w*4*DIM, 1, output)
             output = tf.reshape(output, [-1])
         return output
 
@@ -223,7 +227,6 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         return output
 
     def LeNet(inputs):
-
         inputs = tf.reshape(inputs, [-1, 1, 28, 28])
 
         le_wideness = 1
