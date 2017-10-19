@@ -68,7 +68,7 @@ MEMORY_SHARE=0.95
 COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax"
 DATAGRAD = 0
 
-RANDOM_SEED = 1
+RANDOM_SEED = None
 
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
@@ -101,9 +101,9 @@ for k, v in [arg.split('=', 1) for arg in sys.argv[1:]]:
 assert LEARNING_RATE_DECAY in ("piecewise", "exponential", False)
 assert COMBINE_OUTPUTS_FOR_SLOPES in (True, False)
 
-tf.set_random_seed(RANDOM_SEED)
-np.random.seed(RANDOM_SEED)
-
+if RANDOM_SEED is not None:
+    tf.set_random_seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
 
 if BALANCED:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE * 10
