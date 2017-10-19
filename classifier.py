@@ -29,7 +29,6 @@ import gan_logging
 
 
 
-
 LAMBDA = 0 # 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY = 0
 GRADIENT_SHRINKING = False
@@ -69,6 +68,8 @@ MEMORY_SHARE=0.95
 COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax"
 DATAGRAD = 0
 
+RANDOM_SEED = 1
+
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
     if s=="None":
@@ -99,6 +100,9 @@ for k, v in [arg.split('=', 1) for arg in sys.argv[1:]]:
 
 assert LEARNING_RATE_DECAY in ("piecewise", "exponential", False)
 assert COMBINE_OUTPUTS_FOR_SLOPES in (True, False)
+
+tf.set_random_seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
 
 
 if BALANCED:
