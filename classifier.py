@@ -34,6 +34,7 @@ LAMBDA = 0 # 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY = 0
 GRADIENT_SHRINKING = False
 LIPSCHITZ_TARGET = 1.0
+SHRINKING_NORM_EMA_FACTOR = 1.0
 
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
@@ -197,9 +198,23 @@ elif SHRINKING_REDUCTOR == "logsum":
 elif SHRINKING_REDUCTOR == "none":
     grad_norm = slopes
 
+
 if GRADIENT_SHRINKING:
     print "gradient shrinking"
-    disc_real /= grad_norm
+
+    if SHRINKING_NORM_EMA_FACTOR != 1.0:
+        print "gradient shrinking using moving_gard_norm"
+        batch_grad_norm = grad_norm
+        moving_grad_norm = lib.param("shrinking.moving_grad_norm", np.ones([]), dtype=tf.float32, trainable=False)
+
+        ema_factor = float(SHRINKING_NORM_EMA_FACTOR)
+        # for CMA: update_moving_grad_norm_op = tf.assign(moving_grad_norm, ((float_stats_iter/(float_stats_iter+1))*moving_grad_norm) + ((1/(float_stats_iter+1))*batch_grad_norm))
+        update_moving_grad_norm_op = tf.assign(moving_grad_norm, (1.0-ema_factor)*moving_grad_norm + ema_factor*batch_grad_norm)
+        with tf.control_dependencies([update_moving_grad_norm_op]):
+            disc_real /= moving_grad_norm
+    else:
+        disc_real /= grad_norm
+
     disc_real *= LIPSCHITZ_TARGET
 
 softmax_output = tf.nn.softmax(disc_real)
@@ -307,6 +322,7 @@ with tf.Session(config=config) as session:
             extra_summaries.append(tf.summary.histogram(var.name + "/gradients", grad))
     extra_summaries.append(tf.summary.histogram("slopes", slopes))
     extra_summaries.append(tf.summary.scalar("grad_norm", grad_norm))
+    extra_summaries.append(tf.summary.scalar("moving_grad_norm", moving_grad_norm))
     extra_summaries.append(tf.summary.histogram("real_plus_noise_slopes", real_plus_noise_slopes))
     merged_extra_summary_op = tf.summary.merge(extra_summaries)
 
