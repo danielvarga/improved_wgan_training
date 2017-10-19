@@ -67,6 +67,7 @@ MEMORY_SHARE=0.95
 
 COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax"
 DATAGRAD = 0
+DROPOUT_KEEP_PROB=0.5
 
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
@@ -132,8 +133,8 @@ real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE, augment=Fal
 
 lib.print_model_settings(locals().copy())
 
-
-Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT, REUSE_BATCHNORM=True)
+dropout = tf.placeholder("float")
+Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT, REUSE_BATCHNORM=True, dropout=dropout)
 
 real_labels = tf.placeholder(tf.uint8, shape=[BATCH_SIZE])
 real_labels_onehot = tf.one_hot(real_labels, 10)
@@ -238,7 +239,8 @@ if WEIGHT_DECAY > 0:
     with tf.variable_scope('weights_norm') as scope:
         weight_loss = tf.reduce_sum(
             input_tensor = WEIGHT_DECAY*tf.stack(
-                [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+#                [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+                [tf.nn.l2_loss(var) for var in disc_filters]
             ),
             name='weight_loss'
         )
@@ -336,7 +338,7 @@ with tf.Session(config=config) as session:
         _weight_loss, _disc_cost, _,  _disc_real, summary_loss = session.run(
                 [weight_loss, disc_cost, disc_train_op, disc_real, merged_loss_summary_op],
                 feed_dict={
-                    real_data: _real_data[0], real_labels: _real_data[1]}
+                    real_data: _real_data[0], real_labels: _real_data[1], dropout:DROPOUT_KEEP_PROB}
             )
 
         lib.plot.plot('train disc cost', _disc_cost)
@@ -361,7 +363,7 @@ with tf.Session(config=config) as session:
                 _dev_disc_cost, _dev_real_disc_output = session.run(
                     [disc_cost, disc_real],
                     feed_dict={
-                        real_data: _real_data_test[0], real_labels: _real_data_test[1]}
+                        real_data: _real_data_test[0], real_labels: _real_data_test[1], dropout:1.0}
                 )
                 dev_disc_costs.append(_dev_disc_cost)
                 dev_real_disc_outputs.append(_dev_real_disc_output)
@@ -384,6 +386,7 @@ with tf.Session(config=config) as session:
 
             dev_summary_loss, dev_summary_extra = session.run([merged_loss_summary_op, merged_extra_summary_op],
                                                               feed_dict={
+                                                                  dropout: 1.0,
                                                                   real_data: _real_data_test[0],
                                                                   real_labels: _real_data_test[1]
                                                               })
@@ -397,7 +400,7 @@ with tf.Session(config=config) as session:
             summary_extra = session.run(
                 [merged_extra_summary_op],
                 feed_dict={
-                    real_data: _real_data[0], real_labels: _real_data[1]}
+                    real_data: _real_data[0], real_labels: _real_data[1], dropout:1.0}
             )
             train_writer.add_summary(summary_extra[0], iteration)
 

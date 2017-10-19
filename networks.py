@@ -33,7 +33,7 @@ def Normalize(name, axes, inputs):
     else:
         return lib.ops.batchnorm.Batchnorm(name,axes,inputs,fused=FUSED)
 
-def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None, REUSE_BATCHNORM=False):
+def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None, REUSE_BATCHNORM=False, dropout=None):
 
     CHANNEL = INPUT_SHAPE[0]
     assert INPUT_SHAPE[1] == INPUT_SHAPE[2]
@@ -226,7 +226,36 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         output = build_net(output, filter_num_config=filter_num_config, nb_classes=10)
         return output
 
+
     def LeNet(inputs):
+        inputs = tf.reshape(inputs, [-1, 1, 28, 28])
+
+        net = lib.ops.conv2d.Conv2D("Discriminator.Conv0", CHANNEL, 6, 5, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='SAME')
+        net = tf.nn.relu(net)
+        net = tf.nn.max_pool(net, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
+
+        net = lib.ops.conv2d.Conv2D("Discriminator.Conv1", 6, 16, 5, net, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='VALID')
+        net = tf.nn.relu(net)
+        net = tf.nn.max_pool(net, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
+
+        net = lib.ops.conv2d.Conv2D("Discriminator.Conv2", 16, 120, 5, net, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='VALID')
+        net = tf.nn.relu(net)
+
+        net = tf.reshape(net,[-1,120])
+
+        net = lib.ops.linear.Linear('Discriminator.Linear1', 120, 84, net)
+        net = tf.nn.relu(net)
+
+        assert dropout is not None
+        net = tf.nn.dropout(net, dropout)
+
+        net = lib.ops.linear.Linear('Discriminator.Linear2', 84, OUTPUT_COUNT, net)
+        net = tf.nn.relu(net)
+
+        return net
+
+
+    def LeNet_tuned(inputs):
         inputs = tf.reshape(inputs, [-1, 1, 28, 28])
 
         le_wideness = 1
@@ -248,14 +277,15 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         net = LeakyReLU(net, alpha=0)
 
         #dropout1 = tf.placeholder("float")
-        #net = tf.nn.dropout(net, dropout1)
+        #        assert dropout is not None
+        #        net = tf.nn.dropout(net, dropout1)
 
         if DO_BATCHNORM:
             net = lib.ops.batchnorm.Batchnorm("Discriminator.BN0", [0], net, fused=FUSED)
 
         net = lib.ops.linear.Linear('Discriminator.Linear2', 84, OUTPUT_COUNT, net)
 
-        #net = net / dropout1
+#        net = net / dropout
         net = tf.nn.relu(net)
         return net
 
