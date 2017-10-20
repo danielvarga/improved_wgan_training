@@ -268,9 +268,7 @@ if DISC_TYPE == "cifarResnet":
     )
 else:
     disc_optimizer = tf.train.AdamOptimizer(
-        learning_rate=learning_rate,
-        beta1=0.5,
-        beta2=0.9
+        learning_rate=learning_rate
     )
 
 disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
