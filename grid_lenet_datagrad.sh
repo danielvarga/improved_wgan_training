@@ -2,11 +2,12 @@ NAME=lenet_datagrad
 VAR=DATAGRAD
 
 mkdir -p couts/
-for I in 1 2 3
+#for VAL in 0.01 0.1 1 10 50 100 150 200
+for VAL in `seq 10 10 100`
 do
-	for VAL in 0.00001 0.0001 0.001 0.01 0.1 1 10 100
-#	for VAL in 150 200 500 1000 2000
-	do
-		CUDA_VISIBLE_DEVICES=0 python classifier.py --DATASET=mnist --LEARNING_RATE=0.001 --MEMORY_SHARE=0.4 --DISC_TYPE=lenet --LEARNING_RATE_DECAY=piecewise --ITERS=10000 --$VAR=$VAL > couts/$NAME.${VAR}_${VAL}.cout 2> couts/$NAME.${VAR}_${VAL}.cerr
-	done
+	CUDA_VISIBLE_DEVICES=1 python classifier.py --DROPOUT_KEEP_PROB=0.5 --WEIGHT_DECAY=0.0005 --DATASET=mnist --LEARNING_RATE=0.001 --MEMORY_SHARE=0.4 --DISC_TYPE=lenet --ITERS=10000 --$VAR=$VAL > couts/$NAME.${VAR}_${VAL}.cout 2> couts/$NAME.${VAR}_${VAL}.cerr
 done
+
+# conclusion: DATAGRAD in (10, 50) is the best range
+# accuracy is around 97.5%
+# this is more than half percent increase compared to the baseline
