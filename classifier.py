@@ -206,10 +206,10 @@ elif SHRINKING_REDUCTOR == "none":
 if GRADIENT_SHRINKING:
     print "gradient shrinking"
 
+    moving_grad_norm = lib.param("shrinking.moving_grad_norm", np.ones([]), dtype=tf.float32, trainable=False)
     if SHRINKING_NORM_EMA_FACTOR != 1.0:
         print "gradient shrinking using moving_gard_norm"
         batch_grad_norm = grad_norm
-        moving_grad_norm = lib.param("shrinking.moving_grad_norm", np.ones([]), dtype=tf.float32, trainable=False)
 
         ema_factor = float(SHRINKING_NORM_EMA_FACTOR)
         # for CMA: update_moving_grad_norm_op = tf.assign(moving_grad_norm, ((float_stats_iter/(float_stats_iter+1))*moving_grad_norm) + ((1/(float_stats_iter+1))*batch_grad_norm))
