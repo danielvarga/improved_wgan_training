@@ -174,6 +174,12 @@ def get_slopes(input):
             # cond = tf.greater(softmaxed, 0.01)
             # gradients = tf.gradients(output * tf.where(cond, softmaxed, 0.0*softmaxed), [input])[0]
             gradients = tf.gradients(output * softmaxed, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "softmax2":
+            jacobians = util.jacobian_by_batch(output, input)
+            softmaxed = tf.nn.softmax(output)
+            softmaxed = tf.expand_dims(softmaxed, 2)
+            weighted_jacobians = jacobians * softmaxed
+            gradients = tf.reshape(weighted_jacobians, [BATCH_SIZE, -1])
         elif COMBINE_OUTPUTS_MODE == "onehot":
             gradients = tf.gradients(output * real_labels_onehot, [input])[0]
         else:
@@ -182,7 +188,8 @@ def get_slopes(input):
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     else:
         jacobians = util.jacobian_by_batch(output, input)
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[3]))
+
+        slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[1,2]))
     return slopes
 
 loss_list = []
@@ -222,7 +229,6 @@ if GRADIENT_SHRINKING:
 
     disc_real *= LIPSCHITZ_TARGET
 
-softmax_output = tf.nn.softmax(disc_real)
 xent_loss = tf.nn.softmax_cross_entropy_with_logits(
     logits=disc_real,
     labels=real_labels_onehot

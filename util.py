@@ -56,6 +56,8 @@ def jacobian_by_batch(ys, xs):
         lambda j, result: (j+1, result.write(j, tf.gradients(ys[:,j], xs))),
         loop_vars)
     result = jacobian.stack()
+    result = result[:,0]
+    result = tf.transpose(result, perm=[1,0,2])
     return result
 
 def get_weight_loss(weights, wd):
