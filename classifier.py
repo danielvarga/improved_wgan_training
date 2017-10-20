@@ -67,6 +67,7 @@ MEMORY_SHARE=0.95
 
 COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax"
 DATAGRAD = 0
+DROPOUT_KEEP_PROB=0.5
 
 RANDOM_SEED = None
 
@@ -137,8 +138,8 @@ real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE, augment=Fal
 
 lib.print_model_settings(locals().copy())
 
-
-Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT, REUSE_BATCHNORM=True)
+dropout = tf.placeholder("float")
+Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT, REUSE_BATCHNORM=True, dropout=dropout)
 
 real_labels = tf.placeholder(tf.uint8, shape=[BATCH_SIZE])
 real_labels_onehot = tf.one_hot(real_labels, 10)
@@ -206,11 +207,11 @@ elif SHRINKING_REDUCTOR == "none":
 if GRADIENT_SHRINKING:
     print "gradient shrinking"
 
-    moving_grad_norm = lib.param("shrinking.moving_grad_norm", np.ones([]), dtype=tf.float32, trainable=False)
     if SHRINKING_NORM_EMA_FACTOR != 1.0:
-        print "gradient shrinking using moving_gard_norm"
+        print "gradient shrinking using moving_grad_norm"
         batch_grad_norm = grad_norm
 
+        moving_grad_norm = lib.param("shrinking.moving_grad_norm", np.ones([]), dtype=tf.float32, trainable=False)
         ema_factor = float(SHRINKING_NORM_EMA_FACTOR)
         # for CMA: update_moving_grad_norm_op = tf.assign(moving_grad_norm, ((float_stats_iter/(float_stats_iter+1))*moving_grad_norm) + ((1/(float_stats_iter+1))*batch_grad_norm))
         update_moving_grad_norm_op = tf.assign(moving_grad_norm, (1.0-ema_factor)*moving_grad_norm + ema_factor*batch_grad_norm)
@@ -257,7 +258,8 @@ if WEIGHT_DECAY > 0:
     with tf.variable_scope('weights_norm') as scope:
         weight_loss = tf.reduce_sum(
             input_tensor = WEIGHT_DECAY*tf.stack(
-                [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+#                [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+                [tf.nn.l2_loss(var) for var in disc_filters]
             ),
             name='weight_loss'
         )
@@ -285,9 +287,7 @@ if DISC_TYPE == "cifarResnet":
     )
 else:
     disc_optimizer = tf.train.AdamOptimizer(
-        learning_rate=learning_rate,
-        beta1=0.5,
-        beta2=0.9
+        learning_rate=learning_rate
     )
 
 disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
@@ -326,7 +326,8 @@ with tf.Session(config=config) as session:
             extra_summaries.append(tf.summary.histogram(var.name + "/gradients", grad))
     extra_summaries.append(tf.summary.histogram("slopes", slopes))
     extra_summaries.append(tf.summary.scalar("grad_norm", grad_norm))
-    extra_summaries.append(tf.summary.scalar("moving_grad_norm", moving_grad_norm))
+    if GRADIENT_SHRINKING and (SHRINKING_NORM_EMA_FACTOR != 1.0):
+        extra_summaries.append(tf.summary.scalar("moving_grad_norm", moving_grad_norm))
     extra_summaries.append(tf.summary.histogram("real_plus_noise_slopes", real_plus_noise_slopes))
     merged_extra_summary_op = tf.summary.merge(extra_summaries)
 
@@ -356,7 +357,7 @@ with tf.Session(config=config) as session:
         _weight_loss, _disc_cost, _,  _disc_real, summary_loss = session.run(
                 [weight_loss, disc_cost, disc_train_op, disc_real, merged_loss_summary_op],
                 feed_dict={
-                    real_data: _real_data[0], real_labels: _real_data[1]}
+                    real_data: _real_data[0], real_labels: _real_data[1], dropout:DROPOUT_KEEP_PROB}
             )
 
         lib.plot.plot('train disc cost', _disc_cost)
@@ -381,7 +382,7 @@ with tf.Session(config=config) as session:
                 _dev_disc_cost, _dev_real_disc_output = session.run(
                     [disc_cost, disc_real],
                     feed_dict={
-                        real_data: _real_data_test[0], real_labels: _real_data_test[1]}
+                        real_data: _real_data_test[0], real_labels: _real_data_test[1], dropout:1.0}
                 )
                 dev_disc_costs.append(_dev_disc_cost)
                 dev_real_disc_outputs.append(_dev_real_disc_output)
@@ -404,6 +405,7 @@ with tf.Session(config=config) as session:
 
             dev_summary_loss, dev_summary_extra = session.run([merged_loss_summary_op, merged_extra_summary_op],
                                                               feed_dict={
+                                                                  dropout: 1.0,
                                                                   real_data: _real_data_test[0],
                                                                   real_labels: _real_data_test[1]
                                                               })
@@ -417,7 +419,7 @@ with tf.Session(config=config) as session:
             summary_extra = session.run(
                 [merged_extra_summary_op],
                 feed_dict={
-                    real_data: _real_data[0], real_labels: _real_data[1]}
+                    real_data: _real_data[0], real_labels: _real_data[1], dropout:1.0}
             )
             train_writer.add_summary(summary_extra[0], iteration)
 

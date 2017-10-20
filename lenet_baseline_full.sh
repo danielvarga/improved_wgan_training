@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=1 python classifier.py --DROPOUT_KEEP_PROB=0.5 --DISC_TYPE=lenet --DATASET=mnist --LEARNING_RATE=0.001 --WEIGHT_DECAY=0.0005 --ITERS=50000 --TRAIN_DATASET_SIZE=60000 > couts/lenet_baseline_full.cout 2> couts/lenet_baseline_full.cerr
