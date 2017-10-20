@@ -1,6 +1,11 @@
 import numpy as np
 from keras.datasets import mnist, cifar10
 from keras.preprocessing.image import ImageDataGenerator
+from keras.utils.data_utils import get_file
+import gzip
+import os
+
+
 
 def load_raw_data(dataset):
     if dataset == "mnist":
@@ -8,10 +13,17 @@ def load_raw_data(dataset):
         X_train = np.expand_dims(X_train, 3)
         X_test = np.expand_dims(X_test, 3)
 
+    elif dataset == "fashion_mnist":
+        (X_train, y_train), (X_test, y_test) = load_fashion_mnist()
+        X_train = np.expand_dims(X_train, 3)
+        X_test = np.expand_dims(X_test, 3)
+
     elif dataset == "cifar10":
         (X_train, y_train), (X_test, y_test) = cifar10.load_data()
         y_train = np.squeeze(y_train)
         y_test = np.squeeze(y_test)
+    else:
+        assert False, "Unknown dataset: " + dataset
 
     # convert brightness values from bytes to floats between 0 and 1:
     X_train = X_train.astype('float32')
@@ -141,3 +153,36 @@ def featurewise_std_normalization(xs):
     std = np.expand_dims(std, 0)
     std = np.expand_dims(std, 0)
     return xs / (std + 1e-7)
+
+
+
+
+def load_fashion_mnist():
+    """Loads the Fashion-MNIST dataset.
+    # Returns
+        Tuple of Numpy arrays: `(x_train, y_train), (x_test, y_test)`.
+    """
+    dirname = os.path.join('datasets', 'fashion-mnist')
+    base = 'http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/'
+    files = ['train-labels-idx1-ubyte.gz', 'train-images-idx3-ubyte.gz',
+             't10k-labels-idx1-ubyte.gz', 't10k-images-idx3-ubyte.gz']
+
+    paths = []
+    for file in files:
+        paths.append(get_file(file, origin=base + file, cache_subdir=dirname))
+
+    with gzip.open(paths[0], 'rb') as lbpath:
+        y_train = np.frombuffer(lbpath.read(), np.uint8, offset=8)
+
+    with gzip.open(paths[1], 'rb') as imgpath:
+        x_train = np.frombuffer(imgpath.read(), np.uint8,
+                                offset=16).reshape(len(y_train), 28, 28)
+
+    with gzip.open(paths[2], 'rb') as lbpath:
+        y_test = np.frombuffer(lbpath.read(), np.uint8, offset=8)
+
+    with gzip.open(paths[3], 'rb') as imgpath:
+        x_test = np.frombuffer(imgpath.read(), np.uint8,
+                               offset=16).reshape(len(y_test), 28, 28)
+
+    return (x_train, y_train), (x_test, y_test)
