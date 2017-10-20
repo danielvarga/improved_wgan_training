@@ -12,3 +12,6 @@ done
 # conclusion: LAMBDA should be small (0.0001 or 0.001), LIPSCHITZ_TARGET should be between 0.3 and 3
 # half or the runs failed. GP with dropout might be unstable
 # best results are slightly under 97% accuracy
+
+# replacing dropout with batchnorm fixes this completely and we get around 97% accuracy. Slightly better than the baseline, slightly worse than datagrad.
+# LAMBDA=0.0001, LIPSCHITZ_TARGET should be between 0.3 and 3
