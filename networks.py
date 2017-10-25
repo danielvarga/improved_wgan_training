@@ -246,9 +246,13 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         net = lib.ops.linear.Linear('Discriminator.Linear1', 120, 84, net)
         net = tf.nn.relu(net)
 
-        assert dropout is not None
-        net = tf.nn.dropout(net, dropout)
-        #net = lib.ops.batchnorm.Batchnorm("Discriminator.BN0", [0], net, fused=FUSED)
+        if DO_BATCHNORM:
+            print "!!!!!! Using batchnorm instead of dropout !!!!!!!"
+            net = lib.ops.batchnorm.Batchnorm("Discriminator.BN0", [0], net, fused=FUSED)
+        else:
+            assert dropout is not None
+            net = tf.nn.dropout(net, dropout)
+
 
         net = lib.ops.linear.Linear('Discriminator.Linear2', 84, OUTPUT_COUNT, net)
         net = tf.nn.relu(net)
