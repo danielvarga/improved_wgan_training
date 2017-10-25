@@ -246,7 +246,7 @@ elif LOSS_TYPE == "l2":
     disc_cost += l2_loss
 
 if DATAGRAD > 0:
-    assert LOSS_TYPE = "xent"
+    assert LOSS_TYPE == "xent"
     datagrad_loss = tf.reduce_sum(tf.square(tf.gradients(xent_loss, [real_data])[0]), axis=1)
     datagrad_loss_mean = tf.reduce_mean(datagrad_loss)
     loss_list.append(('datagrad_loss', datagrad_loss_mean))
