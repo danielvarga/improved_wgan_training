@@ -222,16 +222,27 @@ if GRADIENT_SHRINKING:
 
     disc_real *= LIPSCHITZ_TARGET
 
-softmax_output = tf.nn.softmax(disc_real)
+disc_cost = 0
+
 xent_loss = tf.nn.softmax_cross_entropy_with_logits(
     logits=disc_real,
     labels=real_labels_onehot
 )
-datagrad_term = tf.reduce_sum(tf.square(tf.gradients(xent_loss, [real_data])[0]), axis=1)
+xent_loss_mean = tf.reduce_mean(xent_loss)
+loss_list.append(('xent_loss', xent_loss_mean))
+disc_cost += xent_loss_mean
 
-disc_cost = tf.reduce_mean(xent_loss + DATAGRAD * datagrad_term)
+l2_loss = tf.nn.l2_loss(disc_real - real_labels_onehot)
+loss_list.append(('l2_loss', l2_loss))
+disc_cost += l2_loss
 
-loss_list.append(('xent_loss', disc_cost))
+if DATAGRAD > 0:
+    datagrad_loss = tf.reduce_sum(tf.square(tf.gradients(xent_loss, [real_data])[0]), axis=1)
+    datagrad_loss_mean = tf.reduce_mean(datagrad_loss)
+    loss_list.append(('datagrad_loss', datagrad_loss_mean))
+    disc_cost += DATAGRAD * datagrad_loss_mean
+
+
 
 if LAMBDA > 0:
     if GP_VERSION == STEEP_HALF_PARABOLA:

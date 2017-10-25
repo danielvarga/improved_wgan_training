@@ -11,3 +11,5 @@ done
 
 # conclusion: wd=0.0005 dropout=0.5 is a good setting (just like in full baseline)
 # accuracy is close to 97% (slightly under)
+
+# running it with L2 loss gives the same accuracy (slightly under 97%)
