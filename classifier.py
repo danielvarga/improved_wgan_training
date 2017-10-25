@@ -68,6 +68,7 @@ MEMORY_SHARE=0.95
 COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax"
 DATAGRAD = 0
 DROPOUT_KEEP_PROB=0.5
+LOSS_TYPE = "xent"
 
 RANDOM_SEED = None
 
@@ -174,6 +175,12 @@ def get_slopes(input):
             # cond = tf.greater(softmaxed, 0.01)
             # gradients = tf.gradients(output * tf.where(cond, softmaxed, 0.0*softmaxed), [input])[0]
             gradients = tf.gradients(output * softmaxed, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "softmax2":
+            jacobians = util.jacobian_by_batch(output, input)
+            softmaxed = tf.nn.softmax(output)
+            softmaxed = tf.expand_dims(softmaxed, 2)
+            weighted_jacobians = jacobians * softmaxed
+            gradients = tf.reshape(weighted_jacobians, [BATCH_SIZE, -1])
         elif COMBINE_OUTPUTS_MODE == "onehot":
             gradients = tf.gradients(output * real_labels_onehot, [input])[0]
         else:
@@ -182,7 +189,8 @@ def get_slopes(input):
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     else:
         jacobians = util.jacobian_by_batch(output, input)
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[3]))
+
+        slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[1,2]))
     return slopes
 
 loss_list = []
@@ -224,19 +232,21 @@ if GRADIENT_SHRINKING:
 
 disc_cost = 0
 
-xent_loss = tf.nn.softmax_cross_entropy_with_logits(
-    logits=disc_real,
-    labels=real_labels_onehot
-)
-xent_loss_mean = tf.reduce_mean(xent_loss)
-loss_list.append(('xent_loss', xent_loss_mean))
-disc_cost += xent_loss_mean
-
-l2_loss = tf.nn.l2_loss(disc_real - real_labels_onehot)
-loss_list.append(('l2_loss', l2_loss))
-disc_cost += l2_loss
+if LOSS_TYPE == "xent":
+    xent_loss = tf.nn.softmax_cross_entropy_with_logits(
+        logits=disc_real,
+        labels=real_labels_onehot
+    )
+    xent_loss_mean = tf.reduce_mean(xent_loss)
+    loss_list.append(('xent_loss', xent_loss_mean))
+    disc_cost += xent_loss_mean
+elif LOSS_TYPE == "l2":
+    l2_loss = tf.nn.l2_loss(disc_real - real_labels_onehot)
+    loss_list.append(('l2_loss', l2_loss))
+    disc_cost += l2_loss
 
 if DATAGRAD > 0:
+    assert LOSS_TYPE = "xent"
     datagrad_loss = tf.reduce_sum(tf.square(tf.gradients(xent_loss, [real_data])[0]), axis=1)
     datagrad_loss_mean = tf.reduce_mean(datagrad_loss)
     loss_list.append(('datagrad_loss', datagrad_loss_mean))
