@@ -255,7 +255,7 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
 
 
         net = lib.ops.linear.Linear('Discriminator.Linear2', 84, OUTPUT_COUNT, net)
-        net = tf.nn.relu(net)
+#        net = tf.nn.relu(net)
 
         return net
 
