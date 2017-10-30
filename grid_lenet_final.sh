@@ -1,7 +1,7 @@
 NAME=lenet_final
 mkdir -p couts/
 
-D=1
+D=0
 WD=0.0005
 
 for C in 1 2
@@ -37,7 +37,7 @@ do
 				for LIPS in 0.3 0.5 0.7 1 2 3 4 5
 				do
 					echo --LIPS $LIPS
-					CUDA_VISIBLE_DEVICES=$D python classifier.py --WEIGHT_DECAY=$WD --TRAIN_DATASET_SIZE=$TRAIN --DO_BATCHNORM=$BN --LAMBDA=$LAMBDA --GP_VERSION=4 --LIPSCHITZ_TARGET==$LIPS > couts/$NAME.3b_TRAIN_${TRAIN}_BN_${BN}_LAMBDA_${LAMBDA}_LIPS_${LIPS}_${C}.cout 2> couts/$NAME.3b_TRAIN_${TRAIN}_BN_${BN}_LAMBDA_${LAMBDA}_LIPS_${LIPS}_${C}.cerr
+					CUDA_VISIBLE_DEVICES=$D python classifier.py --WEIGHT_DECAY=$WD --TRAIN_DATASET_SIZE=$TRAIN --DO_BATCHNORM=$BN --LAMBDA=$LAMBDA --GP_VERSION=4 --LIPSCHITZ_TARGET=$LIPS > couts/$NAME.3b_TRAIN_${TRAIN}_BN_${BN}_LAMBDA_${LAMBDA}_LIPS_${LIPS}_${C}.cout 2> couts/$NAME.3b_TRAIN_${TRAIN}_BN_${BN}_LAMBDA_${LAMBDA}_LIPS_${LIPS}_${C}.cerr
 				done
 			done
 		done
