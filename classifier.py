@@ -72,6 +72,8 @@ LOSS_TYPE = "xent"
 
 RANDOM_SEED = None
 
+GP_POINT_COUNT = 1000
+
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
     if s=="None":
@@ -148,6 +150,8 @@ real_labels_onehot = tf.one_hot(real_labels, 10)
 real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, INPUT_DIM])
 disc_real = Discriminator(real_data)
 
+gp_points = tf.placeholder(tf.float32, shape=[BATCH_SIZE, INPUT_DIM])
+
 if DISC_TYPE == "cifarResnet":
     disc_params = tf.trainable_variables()
 else:
@@ -195,8 +199,8 @@ def get_slopes(input):
 
 loss_list = []
 
-assert ALPHA_STRATEGY in ("real", "random", "real_plus_noise"), "In the disciminative setup only real and random are supported"
-interpolates = losses.get_slope_samples(real_data, real_data, ALPHA_STRATEGY, BATCH_SIZE)
+assert ALPHA_STRATEGY in ("real", "random", "real_plus_noise", "fake"), "In the disciminative setup only real and random are supported"
+interpolates = losses.get_slope_samples(real_data, gp_points, ALPHA_STRATEGY, BATCH_SIZE)
 slopes = get_slopes(interpolates)
 
 real_plus_noise_points = losses.get_slope_samples(real_data, real_data, "real_plus_noise",  BATCH_SIZE)
@@ -368,17 +372,23 @@ with tf.Session(config=config) as session:
     # train_writer.add_summary(settings_summary)
 
 
+    #    gp_point_set = np.random.uniform(size=(GP_POINT_COUNT, INPUT_DIM), low=0.0, high=1.0)
+    gp_point_set = X_train + np.random.normal(size=X_train.shape, scale=0.2)
+    gp_point_set = np.reshape(gp_point_set, (X_train.shape[0], -1))
+    gp_point_gen = data.generator(gp_point_set, BATCH_SIZE)
+
 
 
     for iteration in xrange(ITERS+1):
         start_time = time.time()
 
         _real_data = real_gen.next()
+        _gp_points = gp_point_gen.next()
 
         _weight_loss, _disc_cost, _,  _disc_real, summary_loss = session.run(
                 [weight_loss, disc_cost, disc_train_op, disc_real, merged_loss_summary_op],
                 feed_dict={
-                    real_data: _real_data[0], real_labels: _real_data[1], dropout:DROPOUT_KEEP_PROB}
+                    real_data: _real_data[0], real_labels: _real_data[1], dropout:DROPOUT_KEEP_PROB, gp_points:_gp_points}
             )
 
         lib.plot.plot('train disc cost', _disc_cost)
@@ -403,7 +413,7 @@ with tf.Session(config=config) as session:
                 _dev_disc_cost, _dev_real_disc_output = session.run(
                     [disc_cost, disc_real],
                     feed_dict={
-                        real_data: _real_data_test[0], real_labels: _real_data_test[1], dropout:1.0}
+                        real_data: _real_data_test[0], real_labels: _real_data_test[1], dropout:1.0, gp_points:_gp_points}
                 )
                 dev_disc_costs.append(_dev_disc_cost)
                 dev_real_disc_outputs.append(_dev_real_disc_output)
@@ -428,7 +438,8 @@ with tf.Session(config=config) as session:
                                                               feed_dict={
                                                                   dropout: 1.0,
                                                                   real_data: _real_data_test[0],
-                                                                  real_labels: _real_data_test[1]
+                                                                  real_labels: _real_data_test[1], 
+                                                                  gp_points:_gp_points
                                                               })
             dev_summary_acc = tf.Summary(value=[
                 tf.Summary.Value(tag="accuracy", simple_value=dev_acc), 
@@ -440,7 +451,7 @@ with tf.Session(config=config) as session:
             summary_extra = session.run(
                 [merged_extra_summary_op],
                 feed_dict={
-                    real_data: _real_data[0], real_labels: _real_data[1], dropout:1.0}
+                    real_data: _real_data[0], real_labels: _real_data[1], dropout:1.0, gp_points:_gp_points}
             )
             train_writer.add_summary(summary_extra[0], iteration)
 
