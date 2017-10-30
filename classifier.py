@@ -38,7 +38,7 @@ SHRINKING_NORM_EMA_FACTOR = 1.0
 DIM = 64 # Model dimensionality
 BATCH_SIZE = 50 # Batch size
 ITERS = 10000 # How many iterations to train for
-DO_BATCHNORM = True
+DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
 ALPHA_STRATEGY = "real"
 SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
@@ -49,21 +49,21 @@ if LEARNING_RATE_DECAY == "piecewise":
 elif LEARNING_RATE_DECAY == "exponential":
     LEARNING_RATE = 0.001
 else:
-    LEARNING_RATE = 1e-4
+    LEARNING_RATE = 0.001
 AUGMENTATION = "no"
 
 TRAIN_DATASET_SIZE = 2000
 TEST_DATASET_SIZE = 10000
 BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 OUTPUT_COUNT = 10
-DATASET="cifar10" # cifar10 / mnist
-DISC_TYPE = "cifarResnet" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet"
+DATASET="mnist" # cifar10 / mnist
+DISC_TYPE = "lenet" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet"
 
 # Note that L2 ignores LIPSCHITZ_TARGET, while in all the PARABOLA versions
 # slope is first divided by LIPSCHITZ_TARGET.
 STEEP_HALF_PARABOLA, GENTLE_HALF_PARABOLA, L2, PARABOLA = 1, 2, 3, 4
-GP_VERSION = GENTLE_HALF_PARABOLA
-MEMORY_SHARE=0.95
+GP_VERSION = L2
+MEMORY_SHARE=0.3
 
 COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax"
 DATAGRAD = 0
