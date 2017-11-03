@@ -69,6 +69,7 @@ COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax"
 DATAGRAD = 0
 DROPOUT_KEEP_PROB=0.5
 LOSS_TYPE = "xent"
+INPUT_NOISE = 0.0
 
 RANDOM_SEED = None
 
@@ -376,6 +377,8 @@ with tf.Session(config=config) as session:
         start_time = time.time()
 
         _real_data = real_gen.next()
+        _real_data = (_real_data[0] + np.random.normal(size=_real_data[0].shape, scale=INPUT_NOISE),
+                        _real_data[1])
 
         _weight_loss, _disc_cost, _,  _disc_real, summary_loss = session.run(
                 [weight_loss, disc_cost, disc_train_op, disc_real, merged_loss_summary_op],
