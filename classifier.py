@@ -126,9 +126,10 @@ SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-comb
     time.strftime('%Y%m%d-%H%M%S'))
 
 if BALANCED:
-    (X_train, y_train), (X_test, y_test) = data.load_balanced(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
+    (X_train, y_train), (X_test, y_test) = data.load_balanced(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE, seed=RANDOM_SEED)
 else:
-    (X_train, y_train), (X_test, y_test) = data.load_set(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE)    
+    (X_train, y_train), (X_test, y_test) = data.load_set(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE, seed=RANDOM_SEED)
+
 
 INPUT_SHAPE = X_train.shape[1:]
 INPUT_DIM = np.prod(INPUT_SHAPE)

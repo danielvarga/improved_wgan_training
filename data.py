@@ -7,7 +7,7 @@ import os
 
 
 
-def load_raw_data(dataset):
+def load_raw_data(dataset, seed=None):
     if dataset == "mnist":
         (X_train, y_train), (X_test, y_test) = mnist.load_data()
         X_train = np.expand_dims(X_train, 3)
@@ -24,6 +24,17 @@ def load_raw_data(dataset):
         y_test = np.squeeze(y_test)
     else:
         assert False, "Unknown dataset: " + dataset
+
+    if seed is not None:
+        state = np.random.get_state()
+        np.random.seed(seed)
+        sh = np.random.permutation(len(X_train))
+        X_train = X_train[sh]
+        y_train = y_train[sh]
+        sh = np.random.permutation(len(X_test))
+        X_test = X_test[sh]
+        y_test = y_test[sh]
+        np.random.set_state(state)
 
     # convert brightness values from bytes to floats between 0 and 1:
     X_train = X_train.astype('float32')
@@ -60,8 +71,8 @@ def load_pairs(dataset, target_digits, train_dataset_size):
 
     return (reals_train, fakes_train), (reals_test, fakes_test)
 
-def load_set(dataset, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE):
-    (X_train, y_train), (X_test, y_test) = load_raw_data(dataset)
+def load_set(dataset, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE, seed=None):
+    (X_train, y_train), (X_test, y_test) = load_raw_data(dataset, seed=seed)
     X_train = X_train[:TRAIN_DATASET_SIZE]
     y_train = y_train[:TRAIN_DATASET_SIZE]
     X_test = X_test[:TEST_DATASET_SIZE]
@@ -69,7 +80,7 @@ def load_set(dataset, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE):
     return (X_train, y_train), (X_test, y_test)
 
 
-def load_balanced(dataset, size_per_digit, TEST_DATASET_SIZE):
+def load_balanced(dataset, size_per_digit, TEST_DATASET_SIZE, seed=None):
     (X_train, y_train), (X_test, y_test) = load_raw_data(dataset)
 
     X_train_selected = []
