@@ -72,6 +72,7 @@ LOSS_TYPE = "xent"
 INPUT_NOISE = 0.0
 
 RANDOM_SEED = None
+EXPLICIT_JACOBIAN = None
 
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
@@ -113,7 +114,7 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-ts_{}".format(
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-exj_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n",
     "n" if not LEARNING_RATE_DECAY else LEARNING_RATE_DECAY,
@@ -124,6 +125,7 @@ SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-comb
     "y" if GRADIENT_SHRINKING else "n",
     DATAGRAD,
     COMBINE_OUTPUTS_MODE,
+    EXPLICIT_JACOBIAN,
     time.strftime('%Y%m%d-%H%M%S'))
 
 if BALANCED:
@@ -178,6 +180,11 @@ def get_slopes(input):
             # cond = tf.greater(softmaxed, 0.01)
             # gradients = tf.gradients(output * tf.where(cond, softmaxed, 0.0*softmaxed), [input])[0]
             gradients = tf.gradients(output * softmaxed, [input])[0]
+
+        elif COMBINE_OUTPUTS_MODE == "softmaxouter":
+            grads = tf.stack([tf.gradients(yi, x)[0] for yi in tf.unstack(y, axis=1)],axis=2)
+
+
         elif COMBINE_OUTPUTS_MODE == "softmax2":
             jacobians = util.jacobian_by_batch(output, input)
             softmaxed = tf.nn.softmax(output)
@@ -247,6 +254,27 @@ elif LOSS_TYPE == "l2":
     l2_loss = tf.nn.l2_loss(disc_real - real_labels_onehot)
     loss_list.append(('l2_loss', l2_loss))
     disc_cost += l2_loss
+
+
+x = real_data
+y = disc_real
+grads = tf.stack([tf.gradients(yi, x)[0] for yi in tf.unstack(y, axis=1)],axis=2)
+grads = tf.transpose(grads, perm=[0,2,1])
+
+grads = tf.maximum(grads, 0.001)**2
+
+softmaxed = tf.nn.softmax(disc_real)
+softmaxed = tf.expand_dims(softmaxed, 1)
+
+#grad_loss = tf.matmul(tf.expand_dims(real_labels_onehot,1), grads**2)
+grad_loss = tf.matmul(softmaxed, grads**2)
+#grad_loss = grads
+
+print(grad_loss)
+grad_loss = tf.reduce_sum(grad_loss)
+if EXPLICIT_JACOBIAN is not None:
+    disc_cost += EXPLICIT_JACOBIAN * grad_loss
+
 
 if DATAGRAD > 0:
     assert LOSS_TYPE == "xent"
