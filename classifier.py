@@ -74,6 +74,8 @@ INPUT_NOISE = 0.0
 RANDOM_SEED = None
 EXPLICIT_JACOBIAN = None
 
+TOPK_COMBINE_K = 1
+
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
     if s=="None":
@@ -261,15 +263,34 @@ y = disc_real
 grads = tf.stack([tf.gradients(yi, x)[0] for yi in tf.unstack(y, axis=1)],axis=2)
 grads = tf.transpose(grads, perm=[0,2,1])
 
-grads = tf.maximum(grads, 0.001)**2
+#grads = tf.maximum(grads, 0.001)**2
 
 softmaxed = tf.nn.softmax(disc_real)
-softmaxed = tf.expand_dims(softmaxed, 1)
 
-#grad_loss = tf.matmul(tf.expand_dims(real_labels_onehot,1), grads**2)
-grad_loss = tf.matmul(softmaxed, grads**2)
+k = TOPK_COMBINE_K
+values, indices = tf.nn.top_k(softmaxed, k)  # indices will be [[0, 1], [2, 1]], values will be [[6., 2.], [5., 4.]]
+
+# We need to create full indices like [[0, 0], [0, 1], [1, 2], [1, 1]]
+my_range = tf.expand_dims(tf.range(0, indices.get_shape()[0]), 1)  # will be [[0], [1]]
+my_range_repeated = tf.tile(my_range, [1, k])  # will be [[0, 0], [1, 1]]
+
+full_indices = tf.concat([tf.expand_dims(my_range_repeated, 2), tf.expand_dims(indices, 2)],2)  # change shapes to [N, k, 1] and [N, k, 1], to concatenate into [N, k, 2]
+full_indices = tf.reshape(full_indices, [-1, 2])
+
+to_substract = tf.sparse_to_dense(full_indices, softmaxed.get_shape(), tf.reshape(tf.ones_like(values), [-1]), default_value=0., validate_indices=False)
+
+res = to_substract
+
+#softmaxed = tf.expand_dims(softmaxed, 1)
+
+
+#grad_weighted = tf.matmul(tf.expand_dims(res,1), grads)**2
+#res = tf.expand_dims(res,1)
+grad_weighted = tf.einsum('aj,aji->ai', res, grads)**2
+#grad_loss = tf.matmul(softmaxed, grads**2)
 #grad_loss = grads
 
+grad_loss = grad_weighted
 print(grad_loss)
 grad_loss = tf.reduce_sum(grad_loss)
 if EXPLICIT_JACOBIAN is not None:
@@ -397,7 +418,6 @@ with tf.Session(config=config) as session:
     # ])
     # test_writer.add_summary(settings_summary)
     # train_writer.add_summary(settings_summary)
-
 
 
 
