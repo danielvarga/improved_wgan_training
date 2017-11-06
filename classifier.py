@@ -65,7 +65,8 @@ STEEP_HALF_PARABOLA, GENTLE_HALF_PARABOLA, L2, PARABOLA = 1, 2, 3, 4
 GP_VERSION = L2
 MEMORY_SHARE=0.3
 
-COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax"
+COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax" / "topk"
+COMBINE_TOPK = 1
 DATAGRAD = 0
 DROPOUT_KEEP_PROB=0.5
 LOSS_TYPE = "xent"
@@ -186,6 +187,19 @@ def get_slopes(input):
             gradients = tf.reshape(weighted_jacobians, [BATCH_SIZE, -1])
         elif COMBINE_OUTPUTS_MODE == "onehot":
             gradients = tf.gradients(output * real_labels_onehot, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "topk":
+            k = COMBINE_TOPK
+            values, indices = tf.nn.top_k(output, k)
+
+            my_range = tf.expand_dims(tf.range(0, indices.get_shape()[0]), 1)
+            my_range_repeated = tf.tile(my_range, [1, k])
+
+            full_indices = tf.concat([tf.expand_dims(my_range_repeated, 2), tf.expand_dims(indices, 2)],2)
+            full_indices = tf.reshape(full_indices, [-1, 2])
+
+            res = tf.sparse_to_dense(full_indices, output.get_shape(), tf.reshape(tf.ones_like(values), [-1]), default_value=0., validate_indices=False)
+
+            gradients = tf.gradients(output * res, [input])[0]
         else:
             assert False, "Not supported COMBINE_OUTPUTS_MODE: " + COMBINE_OUTPUTS_MODE
 
