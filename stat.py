@@ -23,7 +23,7 @@ rootdir = args.rootdir
 z_key = args.z_key
 regexp_to_match = args.regexp
 
-keys_from_filepath = ["lambda", "gp", "gs", "lr", "net", "iters", "train", "wd", "lips", "combslopes", "lrd", "aug", "bs", "bn", "dg", "comb"]
+keys_from_filepath = ["lambda", "gp", "gs", "lr", "net", "iters", "train", "wd", "lips", "combslopes", "lrd", "aug", "bs", "bn", "dg", "comb", "ent"]
 
 def represents_float(s):
     try: 
@@ -50,7 +50,7 @@ for folder, subs, files in os.walk(rootdir):
         d={}
 
         for key in keys_from_filepath:
-            match = re.search("\-"+key+"_(?P<val>[a-z0-9\.^\-]+)\-", folder)
+            match = re.search("\-"+key+"_(?P<val>([a-z0-9\.^\-]+|\-[a-z0-9\.^\-]+))\-", folder)
             if match:
                 val = match.group('val')
                 record[key] = float(val) if represents_float(val) else val
@@ -106,7 +106,7 @@ for folder, subs, files in os.walk(rootdir):
             if record['dg'] != 0 or record['lambda'] == 0 or record['gs'] != 'n' or record['comb'] != "random" or record['gp'] != 4  or record['bn'] != "n" or record['lips'] != 0.7:
                 continue
             type = "gp3b_do_lips_0.7_" + "%06.4f" % record['lambda']
-        elif True: # final comparison
+        elif False: # final comparison
             if record['dg'] == 0 and record['lambda'] == 0 and record['gs'] == 'n' and record['bn'] == 'n':
                 type = "1_unreg"
             elif record['dg'] == 10 and record['bn'] == "n":
@@ -119,6 +119,14 @@ for folder, subs, files in os.walk(rootdir):
                 type = "4_softmax"
             else:
                 continue
+        elif True: # final comparison
+            type = "lenet"
+            type += "_comb" + str(record['comb'])
+            type += "_lambda" + str(record['lambda'])
+            type += "_ent" + str(record['ent'])
+            type += "_bn" + str(record['bn'])
+            type += "_wd" + str(record['wd'])
+            type += "_net" + str(record['net'])
 
         else:
             type = "unknown"
@@ -136,7 +144,10 @@ for folder, subs, files in os.walk(rootdir):
 
         ea = event_accumulator.EventAccumulator(logfile)
         ea.Reload()
-        zs = ea.Scalars(z_key)
+        try:
+            zs = ea.Scalars(z_key)
+        except:
+            continue
         z_vals = []
         max_step = 0
         for z in zs:
@@ -152,9 +163,14 @@ for folder, subs, files in os.walk(rootdir):
 #        print("train {}, type {}, {} {}".format(record['train'], record['type'], z_key, record[z_key]))
         records.append(record)
 
-#print(records)
+print(records)
+pd.set_option('display.max_columns', 500)
+pd.set_option('display.width', 1000)
 records = sorted(records, key=lambda k: k['type']) 
 data = pd.DataFrame(records)
+
+print(data.groupby("type")['accuracy'].describe())
+
 ax = sns.boxplot(x="train", y="accuracy", hue="type", data=data, palette="PRGn")
 sns.despine(offset=10, trim=True)
 ax.set_title("MNIST, train size: 2000, baseline: LeNet (Lecun et al.), 10 runs")
