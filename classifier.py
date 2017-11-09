@@ -72,7 +72,7 @@ DROPOUT_KEEP_PROB=0.5
 LOSS_TYPE = "xent"
 INPUT_NOISE = 0.0
 
-ENTROPY_PENALTY = None
+ENTROPY_PENALTY = 0.0
 
 RANDOM_SEED = None
 
@@ -275,9 +275,9 @@ if DATAGRAD > 0:
     loss_list.append(('datagrad_loss', datagrad_loss_mean))
     disc_cost += DATAGRAD * datagrad_loss_mean
 
-if ENTROPY_PENALTY is not None:
+if ENTROPY_PENALTY != 0:
     ps = tf.nn.softmax(disc_real)
-    entropy_penalty = -tf.reduce_sum(ps * tf.log(0.000001+ps))
+    entropy_penalty = tf.reduce_sum(ps * tf.log(0.000001+ps))
     loss_list.append(('entropy_penalty', entropy_penalty))
     disc_cost += ENTROPY_PENALTY * entropy_penalty
 
