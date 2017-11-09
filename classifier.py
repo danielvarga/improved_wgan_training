@@ -276,6 +276,7 @@ if DATAGRAD > 0:
 if ENTROPY_PENALTY is not None:
     ps = tf.nn.softmax(disc_real)
     entropy_penalty = -tf.reduce_sum(ps * tf.log(0.000001+ps))
+    loss_list.append(('entropy_penalty', entropy_penalty))
     disc_cost += ENTROPY_PENALTY * entropy_penalty
 
 if LAMBDA > 0:
