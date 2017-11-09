@@ -72,6 +72,8 @@ DROPOUT_KEEP_PROB=0.5
 LOSS_TYPE = "xent"
 INPUT_NOISE = 0.0
 
+ENTROPY_PENALTY = None
+
 RANDOM_SEED = None
 
 def heuristic_cast(s):
@@ -114,7 +116,7 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ts_{}".format(
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n",
     "n" if not LEARNING_RATE_DECAY else LEARNING_RATE_DECAY,
@@ -126,6 +128,7 @@ SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-comb
     DATAGRAD,
     COMBINE_OUTPUTS_MODE,
     COMBINE_TOPK,
+    ENTROPY_PENALTY,
     time.strftime('%Y%m%d-%H%M%S'))
 
 if BALANCED:
@@ -270,7 +273,10 @@ if DATAGRAD > 0:
     loss_list.append(('datagrad_loss', datagrad_loss_mean))
     disc_cost += DATAGRAD * datagrad_loss_mean
 
-
+if ENTROPY_PENALTY is not None:
+    ps = tf.nn.softmax(disc_real)
+    entropy_penalty = -tf.reduce_sum(ps * tf.log(0.000001+ps))
+    disc_cost += ENTROPY_PENALTY * entropy_penalty
 
 if LAMBDA > 0:
     if GP_VERSION == STEEP_HALF_PARABOLA:
