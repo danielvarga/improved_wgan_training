@@ -76,6 +76,8 @@ ENTROPY_PENALTY = None
 
 RANDOM_SEED = None
 
+program_start_time = time.time()
+
 def heuristic_cast(s):
     s = s.strip() # Don't let some stupid whitespace fool you.
     if s=="None":
@@ -478,3 +480,6 @@ with tf.Session(config=config) as session:
             lib.plot.flush()
 
         lib.plot.tick()
+
+program_end_time = time.time()
+print "Total time: " + str(program_end_time - program_start_time)
