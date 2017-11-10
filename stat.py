@@ -54,7 +54,7 @@ for folder, subs, files in os.walk(rootdir):
         d={}
 
         for key in keys_from_filepath:
-            match = re.search("\-"+key+"_(?P<val>([a-z0-9\.^\-]+|\-[a-z0-9\.^\-]+))\-", folder)
+            match = re.search("\-"+key+"_(?P<val>([^\-]+|\-[^\-]+))\-", folder)
             if match:
                 val = match.group('val')
                 record[key] = float(val) if represents_float(val) else val
@@ -82,8 +82,6 @@ for folder, subs, files in os.walk(rootdir):
             continue
 #        print(z_vals)
         record[z_key] = z_vals[-1]
-        if record[z_key] < 0.8:
-            continue
         
 #        print("train {}, type {}, {} {}".format(record['train'], record['type'], z_key, record[z_key]))
         records.append(record)

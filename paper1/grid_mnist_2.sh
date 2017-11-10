@@ -3,7 +3,7 @@
 NAME=mnist_2
 mkdir -p couts/
 
-D=1
+D=0
 WD=0.0005
 LRD=piecewise
 NET=lenet

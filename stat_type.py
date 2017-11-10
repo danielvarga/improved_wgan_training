@@ -1,7 +1,7 @@
 # return a the type of the record
 # should return None if the record is to be filtered out
 def get_type(record):
-    return compare_mnist_1(record)
+    return compare_mnist_2(record)
 
 def compare_mnist_1(record):
     if record['bn'] != "y":
@@ -15,13 +15,14 @@ def compare_mnist_1(record):
     type += "-lb_%05.3f" % record['lambda']
     return type
 
-def compare_unreg_datagrad_end(record):
+def compare_mnist_2(record):
+    print record['ent']
     # compare unreg, datagrad, ent, ent+datagrad
-    if record['dg'] != 0 and record['ent'] != 0:
+    if record['dg'] != 0 and record['ent'] > 0:
         type = "ent+dg"
     elif record['dg'] != 0:
         type = "dg"
-    elif record['ent'] != 0:
+    elif record['ent'] > 0:
         type = "ent"
     else:
         type = "unreg"
