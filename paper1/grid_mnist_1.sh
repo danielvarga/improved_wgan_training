@@ -17,25 +17,25 @@ do
 	for DATAGRAD in 0 5 10 20 50
 	do
 		# baseline no dropout, no bn
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DO_BATCHNORM=False --DROPOUT_KEEP_PROB=1  > couts/$NAME.unreg_DG_${DATAGRAD}_${C}.cout 2> couts/$NAME.unreg_DG_${DATAGRAD}_${C}.cerr
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=$DATAGRAD --DO_BATCHNORM=False --DROPOUT_KEEP_PROB=1 > couts/$NAME.unreg_DG_${DATAGRAD}_${C}.cout 2> couts/$NAME.unreg_DG_${DATAGRAD}_${C}.cerr
 
 		# bn
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DO_BATCHNORM=True > couts/$NAME.bn_DG_${DATAGRAD}_${C}.cout 2> couts/$NAME.bn_DG_${DATAGRAD}_${C}.cerr
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=$DATAGRAD --DO_BATCHNORM=True > couts/$NAME.bn_DG_${DATAGRAD}_${C}.cout 2> couts/$NAME.bn_DG_${DATAGRAD}_${C}.cerr
 
 		# dropout
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DO_BATCHNORM=False > couts/$NAME.do_DG_${DATAGRAD}_${C}.cout 2> couts/$NAME.do_DG_${DATAGRAD}_${C}.cerr
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=$DATAGRAD --DO_BATCHNORM=False > couts/$NAME.do_DG_${DATAGRAD}_${C}.cout 2> couts/$NAME.do_DG_${DATAGRAD}_${C}.cerr
 	done
 
 	for LAMBDA in 0.001 0.003 0.01 0.03
 	do
 		# baseline no dropout, no bn
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DO_BATCHNORM=False --DROPOUT_KEEP_PROB=1  > couts/$NAME.unreg_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.unreg_LAMBDA_${LAMBDA}_${C}.cerr
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$LAMBDA --DO_BATCHNORM=False --DROPOUT_KEEP_PROB=1  > couts/$NAME.unreg_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.unreg_LAMBDA_${LAMBDA}_${C}.cerr
 
 		# bn
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DO_BATCHNORM=True > couts/$NAME.bn_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.bn_LAMBDA_${LAMBDA}_${C}.cerr
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$LAMBDA --DO_BATCHNORM=True > couts/$NAME.bn_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.bn_LAMBDA_${LAMBDA}_${C}.cerr
 
 		# dropout
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DO_BATCHNORM=False > couts/$NAME.do_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.do_LAMBDA_${LAMBDA}_${C}.cerr
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$LAMBDA --DO_BATCHNORM=False > couts/$NAME.do_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.do_LAMBDA_${LAMBDA}_${C}.cerr
 	done
 	
 done

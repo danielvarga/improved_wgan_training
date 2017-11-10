@@ -27,7 +27,7 @@ z_key = args.z_key
 regexp_to_match = args.regexp
 MAX_STEP = args.MAX_STEP
 
-keys_from_filepath = ["lambda", "gp", "gs", "lr", "net", "iters", "train", "wd", "lips", "combslopes", "lrd", "aug", "bs", "bn", "dg", "comb", "ent"]
+keys_from_filepath = ["lambda", "gp", "gs", "lr", "net", "iters", "train", "wd", "lips", "combslopes", "lrd", "aug", "bs", "bn", "dg", "comb", "ent", "do"]
 
 def represents_float(s):
     try: 

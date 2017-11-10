@@ -118,7 +118,7 @@ if BALANCED:
 else:
     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 
-SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}-ts_{}".format(
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}--do_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n",
     "n" if not LEARNING_RATE_DECAY else LEARNING_RATE_DECAY,
@@ -131,6 +131,7 @@ SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-comb
     COMBINE_OUTPUTS_MODE,
     COMBINE_TOPK,
     ENTROPY_PENALTY,
+    DROPOUT_KEEP_PROB,
     time.strftime('%Y%m%d-%H%M%S'))
 
 if BALANCED:
