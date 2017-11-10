@@ -1,13 +1,14 @@
 # compare dg and ep for various trainsizes
 # dg+ent > dg > ent > unreg
 
-NAME=mnist_2
+NAME=mnist_2b
 mkdir -p couts/
+echo $NAME
 
 D=0
 WD=0.0005
 LRD=piecewise
-NET=lenet
+NET=lenettuned
 BN=False
 EP=0.01
 DG=10
