@@ -1,13 +1,31 @@
 # compare batchnorm, dropout and nothing vs Gradient Regularization
+# for unreg: DATAGRAD = 50, LAMBDA=0.01
+# for dropout: DATAGRAD = 50, LAMBDA=0.01
+# for batchnorm: DATAGRAD = 0.001, LAMBDA=0.001
 
 NAME=mnist_1
 mkdir -p couts/
 
-D=1
+D=2
 WD=0.0005
 TRAIN=2000
 LRD=piecewise
 NET=lenet
+
+# additional loop for finding DATAGRAD for batchnorm
+
+for C in `seq 1 1 10`
+do
+    echo ITER $C
+	COMMON_ARGS="--RANDOM_SEED=$C --LEARNING_RATE_DECAY=$LRD --WEIGHT_DECAY=$WD --DISC_TYPE=$NET --TRAIN_DATASET_SIZE=$TRAIN"
+
+	for DATAGRAD in 0.001 0.003 0.01 0.03 0.1 0.3 1
+	do
+		# bn
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=$DATAGRAD --DO_BATCHNORM=True > couts/$NAME.bn_DG_${DATAGRAD}_${C}.cout 2> couts/$NAME.bn_DG_${DATAGRAD}_${C}.cerr
+	done	
+done
+
 
 for C in `seq 1 1 10`
 do
