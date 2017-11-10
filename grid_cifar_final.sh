@@ -6,13 +6,14 @@ WD=0.0005
 BN=True
 LAMBDA=0.01
 LIPS=0.7
-LR=0.1
+LR=0.1 # setting this to 0.01 makes accuracy much worse
 LRD=piecewise
 DATASET=cifar10
 DISC_TYPE=cifarResnet
 MEMORY_SHARE=0.95
-ITERS=50000
+ITERS=30000
 TRAIN=2000
+DG=1 # this seems to be the optimal value for cifar/cifarResnet
 
 
 for C in 1 2 3 4 5
@@ -24,7 +25,7 @@ do
 	CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS > couts/$NAME.1_TRAIN_${TRAIN}_${C}.cout 2> couts/$NAME.1_TRAIN_${TRAIN}_${C}.cerr
 
 	# 2 datagrad
-	CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=10 > couts/$NAME.2_TRAIN_${TRAIN}_${C}.cout 2> couts/$NAME.2_TRAIN_${TRAIN}_${C}.cerr
+	CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=$DG > couts/$NAME.2_TRAIN_${TRAIN}_${C}.cout 2> couts/$NAME.2_TRAIN_${TRAIN}_${C}.cerr
 
 	# 3a GP with L2 gradient loss
 	CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$LAMBDA --GP_VERSION=3 > couts/$NAME.3a_TRAIN_${TRAIN}_${C}.cout 2> couts/$NAME.3a_TRAIN_${TRAIN}_${C}.cerr
