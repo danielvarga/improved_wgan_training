@@ -1,19 +1,36 @@
 # return a the type of the record
 # should return None if the record is to be filtered out
 def get_type(record):
-    return compare_mnist_2(record)
+    return compare_mnist_1(record)
+
+def compare_mnist_1_dg(record):
+    if record['dg'] > 20 or record['lambda'] > 0:
+        return None
+    return compare_mnist_1(record)
 
 def compare_mnist_1(record):
-    if record['bn'] != "y":
-        type = "bn"
-    else:
-        if record['do'] == 1:
-            type = "no"
+    if record['bn'] == "y":
+        if record['dg'] == 0.001:
+            return "bn_dg_0.001"
+        elif record['lambda'] == 0.001:
+            return "bn_gp_0.001"
+        elif record['lambda'] == 0 and record['dg'] == 0:
+            return "bn_unreg"
         else:
-            type = "do"
-    type += "-dg_%02.0f" % record['dg']
-    type += "-lb_%05.3f" % record['lambda']
-    return type
+            return None
+    if record['do'] == 1.0:
+        type = "no"
+    else:
+        type = "do"
+
+    if record['dg'] == 50:
+        return type + "_dg_50"
+    elif record['lambda'] == 0.01:
+        return type + "_gp_0.01"
+    elif record['lambda'] == 0 and record['dg'] == 0:
+        return type + "_unreg"
+        
+    return None
 
 def compare_mnist_2(record):
     print record['ent']

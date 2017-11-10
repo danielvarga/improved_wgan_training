@@ -18,12 +18,14 @@ parser.add_argument("rootdir", help="Folder containing the logs")
 parser.add_argument("z_key", help="Key for z axis")
 parser.add_argument("regexp", type=str, help="Only regexp matched folder names will be parsed")
 parser.add_argument("MAX_STEP", type=int, help="Discard runs that did not run until MAX_STEP iterations")
+parser.add_argument("-x_key", default="train", help="Key for x axis")
 args = parser.parse_args()
 
 import stat_type
 
 rootdir = args.rootdir
 z_key = args.z_key
+x_key = args.x_key
 regexp_to_match = args.regexp
 MAX_STEP = args.MAX_STEP
 
@@ -94,13 +96,13 @@ data = pd.DataFrame(records)
 
 print(data.groupby("type")['accuracy'].describe())
 
-ax = sns.boxplot(x="train", y="accuracy", hue="type", data=data, palette="PRGn")
+ax = sns.boxplot(x=x_key, y="accuracy", hue="type", data=data, palette="PRGn")
 sns.despine(offset=10, trim=True)
-ax.set_title("MNIST, train size: 2000, baseline: LeNet (Lecun et al.), 10 runs")
+# ax.set_title("MNIST, train size: 2000, baseline: LeNet (Lecun et al.), 10 runs")
 ax.get_figure().savefig("mnist_boxplot.png")
 
 # print averages
-grouped_data = data.groupby(('train', 'type'))
+grouped_data = data.groupby((x_key, 'type'))
 print grouped_data[z_key].mean()
 
 """
