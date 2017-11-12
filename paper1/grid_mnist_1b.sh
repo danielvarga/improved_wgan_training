@@ -3,7 +3,7 @@
 # for dropout: DATAGRAD = 50, LAMBDA=0.01
 # for batchnorm: DATAGRAD = 0.001, LAMBDA=0.001
 
-NAME=mnist_1
+NAME=mnist_1b
 mkdir -p couts/
 echo $NAME
 

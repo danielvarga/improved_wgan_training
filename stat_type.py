@@ -1,12 +1,18 @@
 # return a the type of the record
 # should return None if the record is to be filtered out
 def get_type(record):
-    return compare_mnist_1(record)
+    return compare_mnist_2(record)
 
-def compare_mnist_1_dg(record):
-    if record['dg'] > 20 or record['lambda'] > 0:
+def compare_mnist_1_tune(record):
+    if record['bn'] == "y":
         return None
-    return compare_mnist_1(record)
+    elif record['do'] == 1:
+        type = 'no'
+    else:
+        type = 'do'
+    if record['lambda'] > 0:
+        return None
+    return type
 
 def compare_mnist_1(record):
     if record['bn'] == "y":
@@ -14,6 +20,30 @@ def compare_mnist_1(record):
             return "bn_dg_0.001"
         elif record['lambda'] == 0.001:
             return "bn_gp_0.001"
+        elif record['lambda'] == 0 and record['dg'] == 0:
+            return "bn_unreg"
+        else:
+            return None
+    if record['do'] == 1.0:
+        type = "no"
+    else:
+        type = "do"
+
+    if record['dg'] == 50:
+        return type + "_dg_50"
+    elif record['lambda'] == 0.01:
+        return type + "_gp_0.01"
+    elif record['lambda'] == 0 and record['dg'] == 0:
+        return type + "_unreg"
+        
+    return None
+
+def compare_mnist_1b(record):
+    if record['bn'] == "y":
+        if record['dg'] == 0.003:
+            return "bn_dg_0.003"
+        elif record['lambda'] == 0.003:
+            return "bn_gp_0.003"
         elif record['lambda'] == 0 and record['dg'] == 0:
             return "bn_unreg"
         else:
