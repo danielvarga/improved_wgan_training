@@ -1,7 +1,7 @@
 # return a the type of the record
 # should return None if the record is to be filtered out
 def get_type(record):
-    return compare_mnist_2(record)
+    return compare_mnist_1(record)
 
 def compare_mnist_1_tune(record):
     if record['bn'] == "y":
@@ -17,53 +17,43 @@ def compare_mnist_1_tune(record):
 def compare_mnist_1(record):
     if record['bn'] == "y":
         if record['dg'] == 0.001:
-            return "bn_dg_0.001"
+            return "DataGrad"
         elif record['lambda'] == 0.001:
-            return "bn_gp_0.001"
+            return "SpecReg"
         elif record['lambda'] == 0 and record['dg'] == 0:
-            return "bn_unreg"
+            return "Unreg"
         else:
             return None
-    if record['do'] == 1.0:
-        type = "no"
-    else:
-        type = "do"
 
     if record['dg'] == 50:
-        return type + "_dg_50"
+        return "DataGrad"
     elif record['lambda'] == 0.01:
-        return type + "_gp_0.01"
+        return "SpecReg"
     elif record['lambda'] == 0 and record['dg'] == 0:
-        return type + "_unreg"
-        
+        return "Unreg"
     return None
 
 def compare_mnist_1b(record):
     if record['bn'] == "y":
         if record['dg'] == 0.003:
-            return "bn_dg_0.003"
+            return "DataGrad"
         elif record['lambda'] == 0.003:
-            return "bn_gp_0.003"
+            return "SpecReg"
         elif record['lambda'] == 0 and record['dg'] == 0:
-            return "bn_unreg"
+            return "Unreg"
         else:
             return None
-    if record['do'] == 1.0:
-        type = "no"
-    else:
-        type = "do"
 
     if record['dg'] == 50:
-        return type + "_dg_50"
+        return "DataGrad"
     elif record['lambda'] == 0.01:
-        return type + "_gp_0.01"
+        return "SpecReg"
     elif record['lambda'] == 0 and record['dg'] == 0:
-        return type + "_unreg"
-        
+        return "Unreg"
     return None
 
+
 def compare_mnist_2(record):
-    print record['ent']
     # compare unreg, datagrad, ent, ent+datagrad
     if record['dg'] != 0 and record['ent'] > 0:
         type = "ent+dg"

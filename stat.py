@@ -62,6 +62,13 @@ for folder, subs, files in os.walk(rootdir):
                 record[key] = float(val) if represents_float(val) else val
 
 
+        if record['bn'] == "y":
+            record['reg'] = 'batchnorm'
+        elif record['do'] == 1:
+            record['reg'] = "none"
+        else:
+            record['reg'] = "dropout"
+
         type = stat_type.get_type(record)
         if type == None:
             continue
