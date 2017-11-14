@@ -50,7 +50,7 @@ elif LEARNING_RATE_DECAY == "exponential":
     LEARNING_RATE = 0.001
 else:
     LEARNING_RATE = 0.001
-AUGMENTATION = "no"
+AUGMENTATION = False
 
 TRAIN_DATASET_SIZE = 2000
 TEST_DATASET_SIZE = 10000
@@ -148,7 +148,7 @@ INPUT_DIM = np.prod(INPUT_SHAPE)
 #X_train = np.reshape(X_train, [-1, INPUT_DIM])
 #X_test = np.reshape(X_test, [-1, INPUT_DIM])
 
-real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE, augment=False)
+real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE, augment=AUGMENTATION)
 
 lib.print_model_settings(locals().copy())
 
