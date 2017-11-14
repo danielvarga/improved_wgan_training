@@ -76,7 +76,7 @@ ENTROPY_PENALTY = 0.0
 WIDENESS = 1
 
 RANDOM_SEED = None
-
+VERBOSITY=2 # VERBOSITY>=2: logs slopes, VERBOSITY>=3: logs weight and gradient histograms
 program_start_time = time.time()
 
 def heuristic_cast(s):
@@ -373,17 +373,21 @@ with tf.Session(config=config) as session:
     merged_loss_summary_op = tf.summary.merge(loss_summaries)
 
 
-    for param_name, param in lib._params.iteritems():
-        print param_name, param
-        extra_summaries.append(tf.summary.histogram(param_name+"/weights", param))
-    for grad, var in disc_gvs:
-        if grad is not None:
-            extra_summaries.append(tf.summary.histogram(var.name + "/gradients", grad))
-    extra_summaries.append(tf.summary.histogram("slopes", slopes))
-    extra_summaries.append(tf.summary.scalar("grad_norm", grad_norm))
-    if GRADIENT_SHRINKING and (SHRINKING_NORM_EMA_FACTOR != 1.0):
-        extra_summaries.append(tf.summary.scalar("moving_grad_norm", moving_grad_norm))
-    extra_summaries.append(tf.summary.histogram("real_plus_noise_slopes", real_plus_noise_slopes))
+    if VERBOSITY >= 3:
+        for param_name, param in lib._params.iteritems():
+            print param_name, param
+            extra_summaries.append(tf.summary.histogram(param_name+"/weights", param))
+        for grad, var in disc_gvs:
+            if grad is not None:
+                extra_summaries.append(tf.summary.histogram(var.name + "/gradients", grad))
+
+    if VERBOSITY >= 2:
+        extra_summaries.append(tf.summary.histogram("slopes", slopes))
+        extra_summaries.append(tf.summary.scalar("grad_norm", grad_norm))
+        if GRADIENT_SHRINKING and (SHRINKING_NORM_EMA_FACTOR != 1.0):
+            extra_summaries.append(tf.summary.scalar("moving_grad_norm", moving_grad_norm))
+        extra_summaries.append(tf.summary.histogram("real_plus_noise_slopes", real_plus_noise_slopes))
+
     merged_extra_summary_op = tf.summary.merge(extra_summaries)
 
 #    merged_summary_op = tf.summary.merge_all()
