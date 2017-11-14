@@ -73,6 +73,7 @@ LOSS_TYPE = "xent"
 INPUT_NOISE = 0.0
 
 ENTROPY_PENALTY = 0.0
+WIDENESS = 1
 
 RANDOM_SEED = None
 
@@ -109,6 +110,8 @@ for k, v in [arg.split('=', 1) for arg in sys.argv[1:]]:
 assert LEARNING_RATE_DECAY in ("piecewise", "exponential", False)
 assert COMBINE_OUTPUTS_FOR_SLOPES in (True, False)
 
+assert WIDENESS == 1 or DISC_TYPE == "cifarResnet"
+
 if RANDOM_SEED is not None:
     tf.set_random_seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
@@ -120,7 +123,7 @@ else:
 if DO_BATCHNORM:
     DROPOUT_KEEP_PROB = 1.0
 
-SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}-do_{}-ts_{}".format(
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}-do_{}-w_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n",
     "n" if not LEARNING_RATE_DECAY else LEARNING_RATE_DECAY,
@@ -134,6 +137,7 @@ SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-comb
     COMBINE_TOPK,
     ENTROPY_PENALTY,
     DROPOUT_KEEP_PROB,
+    WIDENESS,
     time.strftime('%Y%m%d-%H%M%S'))
 
 if BALANCED:
@@ -153,7 +157,7 @@ real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE, augment=AUG
 lib.print_model_settings(locals().copy())
 
 dropout = tf.placeholder("float")
-Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT, REUSE_BATCHNORM=True, dropout=dropout)
+Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT, REUSE_BATCHNORM=True, dropout=dropout, wideness=WIDENESS)
 
 real_labels = tf.placeholder(tf.uint8, shape=[BATCH_SIZE])
 real_labels_onehot = tf.one_hot(real_labels, 10)

@@ -33,7 +33,7 @@ def Normalize(name, axes, inputs):
     else:
         return lib.ops.batchnorm.Batchnorm(name,axes,inputs,fused=FUSED)
 
-def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None, REUSE_BATCHNORM=False, dropout=None):
+def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None, REUSE_BATCHNORM=False, dropout=None, wideness=1):
 
     CHANNEL = INPUT_SHAPE[0]
     assert INPUT_SHAPE[1] == INPUT_SHAPE[2]
@@ -139,7 +139,6 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
 
         N = 3
         filter_num_config = [16, 32, 64]
-        wideness = 1
         filter_num_config = [wideness * i for i in filter_num_config]
 
         def residual_drop(x, input_shape, output_shape, level, block, strides=(1, 1)):
