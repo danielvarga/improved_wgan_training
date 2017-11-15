@@ -7,6 +7,10 @@ def get_type(record, type_grouping):
         return types_datagrad_lenet(record)
     elif type_grouping == "datagrad_lenettuned":
         return types_datagrad_lenettuned(record)
+    elif type_grouping == "entropy_lenet":
+        return types_entropy_lenet(record)
+    elif type_grouping == "entropy_lenettuned":
+        return types_entropy_lenettuned(record)
 
     return compare_mnist_1(record)
 
@@ -38,6 +42,24 @@ def types_datagrad_lenettuned(record):
         return None
     else:
         return "dg_%03.0f" % record['dg']
+
+# for visualizing grid_mnist_ent.sh results for lenet
+# python stat.py logs accuracy test 10000 -type_grouping entropy_lenet
+def types_entropy_lenet(record):
+    if record['net'] != "lenet":
+        return None
+    else:
+        return "ent %05.3f" % record['ent']
+
+# for visualizing grid_mnist_ent.sh results for lenettuned
+# python stat.py logs accuracy test 10000 -type_grouping entropy_lenettuned
+def types_entropy_lenettuned(record):
+    if record['net'] != "lenettuned":
+        return None
+    elif record['ent'] <= 0.003: # these are all worse results
+        return None
+    else:
+        return "ent %04.2f" % record['ent']
 
 def compare_mnist_1_tune(record):
     if record['bn'] == "y":
