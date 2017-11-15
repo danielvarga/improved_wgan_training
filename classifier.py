@@ -218,8 +218,10 @@ def get_slopes(input):
 
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     else:
-        jacobians = util.jacobian_by_batch(output, input)
-
+        if COMBINE_OUTPUTS_MODE == "softmax": # this is the true JacReg version
+            jacobians = util.jacobian_by_batch(tf.nn.softmax(output), input) 
+        else:
+            jacobians = util.jacobian_by_batch(output, input)
         slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[1,2]))
     return slopes
 
