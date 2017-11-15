@@ -11,6 +11,10 @@ def get_type(record, type_grouping):
         return types_entropy_lenet(record)
     elif type_grouping == "entropy_lenettuned":
         return types_entropy_lenettuned(record)
+    elif type_grouping == "gp_lenet":
+        return types_gp_lenet(record)
+    elif type_grouping == "gp_lenettuned":
+        return types_gp_lenettuned(record)
 
     return compare_mnist_1(record)
 
@@ -44,7 +48,7 @@ def types_datagrad_lenettuned(record):
         return "dg_%03.0f" % record['dg']
 
 # for visualizing grid_mnist_ent.sh results for lenet
-# python stat.py logs accuracy test 10000 -type_grouping entropy_lenet
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_ent accuracy test 10000 -type_grouping entropy_lenet
 def types_entropy_lenet(record):
     if record['net'] != "lenet":
         return None
@@ -52,7 +56,7 @@ def types_entropy_lenet(record):
         return "ent %05.3f" % record['ent']
 
 # for visualizing grid_mnist_ent.sh results for lenettuned
-# python stat.py logs accuracy test 10000 -type_grouping entropy_lenettuned
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_ent accuracy test 10000 -type_grouping entropy_lenettuned
 def types_entropy_lenettuned(record):
     if record['net'] != "lenettuned":
         return None
@@ -60,6 +64,27 @@ def types_entropy_lenettuned(record):
         return None
     else:
         return "ent %04.2f" % record['ent']
+
+# for visualizing grid_mnist_gp.sh results for lenet
+# python stat.py /home/zombori/working_shadow2/logs accuracy test 10000 -type_grouping gp_lenet
+def types_gp_lenet(record):
+    if record['net'] != "lenet":
+        return None
+    elif record['lambda'] >= 0.1 or record['lambda'] <= 0.0001:
+        return None
+    else:
+        return "lambda %06.4f" % record['lambda']
+
+# for visualizing grid_mnist_gp.sh results for lenettuned
+# python stat.py /home/zombori/working_shadow2/logs accuracy test 10000 -type_grouping gp_lenettuned
+def types_gp_lenettuned(record):
+    if record['net'] != "lenettuned":
+        return None
+    elif record['lambda'] >= 0.1 or record['lambda'] <= 0.0001:
+        return None
+    else:
+        return "lambda %06.4f" % record['lambda']
+
 
 def compare_mnist_1_tune(record):
     if record['bn'] == "y":
