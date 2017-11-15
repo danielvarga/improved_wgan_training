@@ -25,6 +25,10 @@ def load_raw_data(dataset, seed=None):
     else:
         assert False, "Unknown dataset: " + dataset
 
+    # remove last 10000 from X_train, y_train for to be the final train set
+    X_train = X_train[:-10000]
+    y_train = y_train[:-10000]
+
     if seed is not None:
         state = np.random.get_state()
         np.random.seed(seed)
@@ -73,6 +77,8 @@ def load_pairs(dataset, target_digits, train_dataset_size):
 
 def load_set(dataset, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE, seed=None):
     (X_train, y_train), (X_test, y_test) = load_raw_data(dataset, seed=seed)
+    assert lent(X_train) >= TRAIN_DATASET_SIZE
+    assert len(X_test) >= TEST_DATASET_SIZE
     X_train = X_train[:TRAIN_DATASET_SIZE]
     y_train = y_train[:TRAIN_DATASET_SIZE]
     X_test = X_test[:TEST_DATASET_SIZE]
