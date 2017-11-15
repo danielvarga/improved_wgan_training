@@ -77,7 +77,7 @@ def load_pairs(dataset, target_digits, train_dataset_size):
 
 def load_set(dataset, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE, seed=None):
     (X_train, y_train), (X_test, y_test) = load_raw_data(dataset, seed=seed)
-    assert lent(X_train) >= TRAIN_DATASET_SIZE
+    assert len(X_train) >= TRAIN_DATASET_SIZE
     assert len(X_test) >= TEST_DATASET_SIZE
     X_train = X_train[:TRAIN_DATASET_SIZE]
     y_train = y_train[:TRAIN_DATASET_SIZE]
