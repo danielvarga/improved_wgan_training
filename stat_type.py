@@ -1,7 +1,43 @@
 # return a the type of the record
 # should return None if the record is to be filtered out
-def get_type(record):
+def get_type(record, type_grouping):
+    if type_grouping == None:
+        return basic_types(record)
+    elif type_grouping == "datagrad_lenet":
+        return types_datagrad_lenet(record)
+    elif type_grouping == "datagrad_lenettuned":
+        return types_datagrad_lenettuned(record)
+
     return compare_mnist_1(record)
+
+# this is called when no type grouping is specified
+def basic_types(record):
+    type = "net_" + str(record['net'])
+    type += "-comb_" + str(record['comb'])
+    type += "-lambda_" + str(record['lambda'])
+    type += "-ent_" + str(record['ent'])
+    type += "-bn_" + str(record['bn'])
+    type += "-wd_" + str(record['wd'])
+
+# for visualizing grid_mnist_datagrad.sh results for lenet
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_datagrad accuracy test 10000 -type_grouping datagrad_lenet
+def types_datagrad_lenet(record):
+    if record['net'] != "lenet":
+        return None
+    elif record['dg'] >= 100: # these are all worse results
+        return None
+    else:
+        return "dg_%03.0f" % record['dg']
+
+# for visualizing grid_mnist_datagrad.sh results for lenettuned
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_datagrad accuracy test 10000 -type_grouping datagrad_lenettuned
+def types_datagrad_lenettuned(record):
+    if record['net'] != "lenettuned":
+        return None
+    elif record['dg'] >= 100: # these are all worse results
+        return None
+    else:
+        return "dg_%03.0f" % record['dg']
 
 def compare_mnist_1_tune(record):
     if record['bn'] == "y":
@@ -127,14 +163,6 @@ def compare_mnist_2(record):
                 type = "4_softmax"
             else:
                 continue
-        elif True: # final comparison
-            type = "lenet"
-            type += "_comb" + str(record['comb'])
-            type += "_lambda" + str(record['lambda'])
-            type += "_ent" + str(record['ent'])
-            type += "_bn" + str(record['bn'])
-            type += "_wd" + str(record['wd'])
-            type += "_net" + str(record['net'])
 
         else:
             type = "unknown"

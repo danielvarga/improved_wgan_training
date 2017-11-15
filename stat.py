@@ -19,15 +19,17 @@ parser.add_argument("z_key", help="Key for z axis")
 parser.add_argument("regexp", type=str, help="Only regexp matched folder names will be parsed")
 parser.add_argument("MAX_STEP", type=int, help="Discard runs that did not run until MAX_STEP iterations")
 parser.add_argument("-x_key", default="train", help="Key for x axis")
+parser.add_argument("-type_grouping", default=None, help="Specify how runs are grouped into types. See stat_type.py")
 args = parser.parse_args()
 
 import stat_type
 
 rootdir = args.rootdir
 z_key = args.z_key
-x_key = args.x_key
 regexp_to_match = args.regexp
 MAX_STEP = args.MAX_STEP
+x_key = args.x_key
+type_grouping = args.type_grouping
 
 keys_from_filepath = ["lambda", "gp", "gs", "lr", "net", "iters", "train", "wd", "lips", "combslopes", "lrd", "aug", "bs", "bn", "dg", "comb", "ent", "do"]
 
@@ -69,7 +71,7 @@ for folder, subs, files in os.walk(rootdir):
         else:
             record['reg'] = "dropout"
 
-        type = stat_type.get_type(record)
+        type = stat_type.get_type(record, type_grouping)
         if type == None:
             continue
         else:
@@ -95,7 +97,7 @@ for folder, subs, files in os.walk(rootdir):
 #        print("train {}, type {}, {} {}".format(record['train'], record['type'], z_key, record[z_key]))
         records.append(record)
 
-print(records)
+# print(records)
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
 records = sorted(records, key=lambda k: k['type']) 
