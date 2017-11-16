@@ -19,8 +19,13 @@ def get_type(record, type_grouping):
         return types_onehot_lenet(record)
     elif type_grouping == "onehot_lenettuned":
         return types_onehot_lenettuned(record)
+    elif type_grouping == "jacreg_lenet":
+        return types_jacreg_lenet(record)
+    elif type_grouping == "jacreg_lenettuned":
+        return types_jacreg_lenettuned(record)
 
-    return compare_mnist_1(record)
+    else:
+        assert False
 
 # this is called when no type grouping is specified
 def basic_types(record):
@@ -30,6 +35,7 @@ def basic_types(record):
     type += "-ent_" + str(record['ent'])
     type += "-bn_" + str(record['bn'])
     type += "-wd_" + str(record['wd'])
+    return type
 
 # for visualizing grid_mnist_datagrad.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_datagrad accuracy test 10000 -type_grouping datagrad_lenet
@@ -86,6 +92,26 @@ def types_gp_lenettuned(record):
         return None
     elif record['lambda'] >= 0.1 or record['lambda'] <= 0.0001:
         return None
+    else:
+        return "lambda %06.4f" % record['lambda']
+
+# for visualizing grid_mnist_jacreg.sh results for lenet
+# python stat.py /home/zombori/working_shadow/logs accuracy test 10000 -type_grouping jacreg_lenet
+def types_jacreg_lenet(record):
+    if record['net'] != "lenet":
+        return None
+#    elif record['lambda'] >= 0.1 or record['lambda'] <= 0.0001:
+#        return None
+    else:
+        return "lambda %06.4f" % record['lambda']
+
+# for visualizing grid_mnist_jacreg.sh results for lenettuned
+# python stat.py /home/zombori/working_shadow2/logs accuracy test 10000 -type_grouping jacreg_lenettuned
+def types_jacreg_lenettuned(record):
+    if record['net'] != "lenettuned":
+        return None
+#    elif record['lambda'] >= 0.1 or record['lambda'] <= 0.0001:
+#        return None
     else:
         return "lambda %06.4f" % record['lambda']
 

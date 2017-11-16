@@ -90,6 +90,7 @@ for folder, subs, files in os.walk(rootdir):
             max_step = z.step
             z_vals.append(z.value)
         if max_step < MAX_STEP:
+            print max_step
             continue
 #        print(z_vals)
         record[z_key] = z_vals[-1]
@@ -103,9 +104,9 @@ pd.set_option('display.width', 1000)
 records = sorted(records, key=lambda k: k['type']) 
 data = pd.DataFrame(records)
 
-print(data.groupby("type")['accuracy'].describe())
+print(data.groupby("type")[z_key].describe())
 
-ax = sns.boxplot(x=x_key, y="accuracy", hue="type", data=data, palette="PRGn")
+ax = sns.boxplot(x=x_key, y=z_key, hue="type", data=data, palette="PRGn")
 sns.despine(offset=10, trim=True)
 # ax.set_title("MNIST, train size: 2000, baseline: LeNet (Lecun et al.), 10 runs")
 ax.get_figure().savefig("mnist_boxplot.png")
