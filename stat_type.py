@@ -15,6 +15,10 @@ def get_type(record, type_grouping):
         return types_gp_lenet(record)
     elif type_grouping == "gp_lenettuned":
         return types_gp_lenettuned(record)
+    elif type_grouping == "onehot_lenet":
+        return types_onehot_lenet(record)
+    elif type_grouping == "onehot_lenettuned":
+        return types_onehot_lenettuned(record)
 
     return compare_mnist_1(record)
 
@@ -66,7 +70,7 @@ def types_entropy_lenettuned(record):
         return "ent %04.2f" % record['ent']
 
 # for visualizing grid_mnist_gp.sh results for lenet
-# python stat.py /home/zombori/working_shadow2/logs accuracy test 10000 -type_grouping gp_lenet
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_gp accuracy test 10000 -type_grouping gp_lenet
 def types_gp_lenet(record):
     if record['net'] != "lenet":
         return None
@@ -76,12 +80,34 @@ def types_gp_lenet(record):
         return "lambda %06.4f" % record['lambda']
 
 # for visualizing grid_mnist_gp.sh results for lenettuned
-# python stat.py /home/zombori/working_shadow2/logs accuracy test 10000 -type_grouping gp_lenettuned
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_gp accuracy test 10000 -type_grouping gp_lenettuned
 def types_gp_lenettuned(record):
     if record['net'] != "lenettuned":
         return None
     elif record['lambda'] >= 0.1 or record['lambda'] <= 0.0001:
         return None
+    else:
+        return "lambda %06.4f" % record['lambda']
+
+
+# for visualizing grid_mnist_onehot.sh results for lenet
+# python stat.py logs accuracy test 10000 -type_grouping onehot_lenet
+def types_onehot_lenet(record):
+    if record['net'] != "lenet":
+        return None
+    # elif record['lambda'] >= 0.1 or record['lambda'] <= 0.0001:
+    #     return None
+    else:
+        return "lambda %06.4f" % record['lambda']
+
+    
+# for visualizing grid_mnist_onehot.sh results for lenettuned
+# python stat.py logs accuracy test 10000 -type_grouping onehot_lenettuned
+def types_onehot_lenettuned(record):
+    if record['net'] != "lenettuned":
+        return None
+    # elif record['lambda'] >= 0.1 or record['lambda'] <= 0.0001:
+    #     return None
     else:
         return "lambda %06.4f" % record['lambda']
 
