@@ -25,7 +25,19 @@ def load_raw_data(dataset, seed=None):
     else:
         assert False, "Unknown dataset: " + dataset
 
-    # remove last 10000 from X_train, y_train for to be the final train set
+    # convert brightness values from bytes to floats between 0 and 1:
+    X_train = X_train.astype('float32')
+    X_test = X_test.astype('float32')
+    X_train /= 255
+    X_test /= 255
+
+    print "Using CHANNELS_FIRST convention!!!"
+    X_train = np.transpose(X_train, axes=(0,3,1,2))
+    X_test = np.transpose(X_test, axes=(0,3,1,2))
+
+    # save last 10000 from X_train, y_train for development set
+    X_devel = X_train[-10000:]
+    y_devel = y_train[-10000:]
     X_train = X_train[:-10000]
     y_train = y_train[:-10000]
 
@@ -40,69 +52,63 @@ def load_raw_data(dataset, seed=None):
         y_test = y_test[sh]
         np.random.set_state(state)
 
-    # convert brightness values from bytes to floats between 0 and 1:
-    X_train = X_train.astype('float32')
-    X_test = X_test.astype('float32')
-    X_train /= 255
-    X_test /= 255
-
     # X_train = featurewise_std_normalization(featurewise_center(X_train))
     # X_test = featurewise_std_normalization(featurewise_center(X_test))
 
-    print "Using CHANNELS_FIRST convention!!!"
-    X_train = np.transpose(X_train, axes=(0,3,1,2))
-    X_test = np.transpose(X_test, axes=(0,3,1,2))
 
-    return (X_train, y_train), (X_test, y_test)
+    return (X_train, y_train), (X_devel, y_devel), (X_test, y_test)
 
 
-def load_pairs(dataset, target_digits, train_dataset_size):
-    (X_train, y_train), (X_test, y_test) = load_raw_data(dataset)
+# def load_pairs(dataset, target_digits, train_dataset_size):
+#     (X_train, y_train), (X_test, y_test) = load_raw_data(dataset)
 
-    reals_train = X_train[y_train==target_digits[0]]
-    fakes_train = X_train[y_train==target_digits[1]]
+#     reals_train = X_train[y_train==target_digits[0]]
+#     fakes_train = X_train[y_train==target_digits[1]]
 
-    # circa 5500 is the untruncated size. 200 seems to be the sweet spot for wgan-gp.
-    reals_train = reals_train[:train_dataset_size]
-    fakes_train = fakes_train[:train_dataset_size]
+#     # circa 5500 is the untruncated size. 200 seems to be the sweet spot for wgan-gp.
+#     reals_train = reals_train[:train_dataset_size]
+#     fakes_train = fakes_train[:train_dataset_size]
 
-    reals_test  = X_test [y_test ==target_digits[0]]
-    fakes_test  = X_test [y_test ==target_digits[1]]
+#     reals_test  = X_test [y_test ==target_digits[0]]
+#     fakes_test  = X_test [y_test ==target_digits[1]]
 
-    print "TARGET DIGITS", target_digits
-    print "TRAIN DATA SIZE", len(reals_train), len(fakes_train)
-    print "TEST DATA SIZE", len(reals_test), len(fakes_test)
+#     print "TARGET DIGITS", target_digits
+#     print "TRAIN DATA SIZE", len(reals_train), len(fakes_train)
+#     print "TEST DATA SIZE", len(reals_test), len(fakes_test)
 
-    return (reals_train, fakes_train), (reals_test, fakes_test)
+#     return (reals_train, fakes_train), (reals_test, fakes_test)
 
-def load_set(dataset, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE, seed=None):
-    (X_train, y_train), (X_test, y_test) = load_raw_data(dataset, seed=seed)
+def load_set(dataset, TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, seed=None):
+    (X_train, y_train), (X_devel, y_devel), (X_test, y_test) = load_raw_data(dataset, seed=seed)
     assert len(X_train) >= TRAIN_DATASET_SIZE
     assert len(X_test) >= TEST_DATASET_SIZE
+    assert len(X_devel) >= DEVEL_DATASET_SIZE
     X_train = X_train[:TRAIN_DATASET_SIZE]
     y_train = y_train[:TRAIN_DATASET_SIZE]
+    X_devel = X_devel[:DEVEL_DATASET_SIZE]
+    y_devel = y_devel[:DEVEL_DATASET_SIZE]
     X_test = X_test[:TEST_DATASET_SIZE]
     y_test = y_test[:TEST_DATASET_SIZE]
-    return (X_train, y_train), (X_test, y_test)
+    return (X_train, y_train), (X_devel, y_devel), (X_test, y_test)
 
 
-def load_balanced(dataset, size_per_digit, TEST_DATASET_SIZE, seed=None):
-    (X_train, y_train), (X_test, y_test) = load_raw_data(dataset)
+# def load_balanced(dataset, size_per_digit, TEST_DATASET_SIZE, seed=None):
+#     (X_train, y_train), (X_test, y_test) = load_raw_data(dataset)
 
-    X_train_selected = []
-    y_train_selected = []
-    for digit in range(10):
-        xs = X_train[y_train==digit]
-        ys = y_train[y_train==digit]
-        X_train_selected.append(xs[:size_per_digit])
-        y_train_selected.append(ys[:size_per_digit])
-    X_train = np.concatenate(X_train_selected)
-    y_train = np.concatenate(y_train_selected)
+#     X_train_selected = []
+#     y_train_selected = []
+#     for digit in range(10):
+#         xs = X_train[y_train==digit]
+#         ys = y_train[y_train==digit]
+#         X_train_selected.append(xs[:size_per_digit])
+#         y_train_selected.append(ys[:size_per_digit])
+#     X_train = np.concatenate(X_train_selected)
+#     y_train = np.concatenate(y_train_selected)
 
-    X_test = X_test[:TEST_DATASET_SIZE]
-    y_test = y_test[:TEST_DATASET_SIZE]
+#     X_test = X_test[:TEST_DATASET_SIZE]
+#     y_test = y_test[:TEST_DATASET_SIZE]
 
-    return (X_train, y_train), (X_test, y_test)
+#     return (X_train, y_train), (X_test, y_test)
 
 def generator(data, batch_size, infinity=True):
     d = data.copy()

@@ -53,8 +53,9 @@ else:
 AUGMENTATION = False
 
 TRAIN_DATASET_SIZE = 2000
+DEVEL_DATASET_SIZE = 10000
 TEST_DATASET_SIZE = 10000
-BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
+# BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 OUTPUT_COUNT = 10
 DATASET="mnist" # cifar10 / mnist
 DISC_TYPE = "lenet" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet"
@@ -116,10 +117,10 @@ if RANDOM_SEED is not None:
     tf.set_random_seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
 
-if BALANCED:
-    TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE * 10
-else:
-    TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
+# if BALANCED:
+#     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE * 10
+# else:
+TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 if DO_BATCHNORM:
     DROPOUT_KEEP_PROB = 1.0
 
@@ -140,17 +141,12 @@ SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-comb
     WIDENESS,
     time.strftime('%Y%m%d-%H%M%S'))
 
-if BALANCED:
-    (X_train, y_train), (X_test, y_test) = data.load_balanced(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE, seed=RANDOM_SEED)
-else:
-    (X_train, y_train), (X_test, y_test) = data.load_set(DATASET, TRAIN_DATASET_SIZE, TEST_DATASET_SIZE, seed=RANDOM_SEED)
+(X_train, y_train), (X_devel, y_devel), (X_test, y_test) = data.load_set(DATASET, TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, seed=RANDOM_SEED)
 
 
 INPUT_SHAPE = X_train.shape[1:]
 INPUT_DIM = np.prod(INPUT_SHAPE)
 
-#X_train = np.reshape(X_train, [-1, INPUT_DIM])
-#X_test = np.reshape(X_test, [-1, INPUT_DIM])
 
 real_gen = data.classifier_generator((X_train, y_train), BATCH_SIZE, augment=AUGMENTATION)
 
@@ -350,6 +346,37 @@ else:
 disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
 disc_train_op = disc_optimizer.apply_gradients(disc_gvs, global_step=global_step)
 
+def evaluate(X_devel, y_devel):
+    dev_disc_costs = []
+    dev_real_disc_outputs = []
+    dev_real_labels = []
+
+    for _real_data_devel in data.classifier_generator((X_devel, y_devel), BATCH_SIZE, infinity=False):
+        _dev_disc_cost, _dev_real_disc_output = session.run(
+            [disc_cost, disc_real],
+            feed_dict={
+                real_data: _real_data_devel[0], real_labels: _real_data_devel[1], dropout:1.0}
+        )
+        dev_disc_costs.append(_dev_disc_cost)
+        dev_real_disc_outputs.append(_dev_real_disc_output)
+        dev_real_labels.append(_real_data_devel[1])
+
+    dev_real_disc_outputs = np.concatenate(dev_real_disc_outputs)
+    dev_real_labels = np.concatenate(dev_real_labels)
+    dev_cost = np.mean(dev_disc_costs)
+    dev_acc = accuracy(dev_real_disc_outputs, dev_real_labels)
+
+    # log losses and extras
+    dev_summary_loss, dev_summary_extra = session.run([merged_loss_summary_op, merged_extra_summary_op],
+                                                      feed_dict={
+                                                          dropout: 1.0,
+                                                          real_data: _real_data_devel[0],
+                                                          real_labels: _real_data_devel[1]
+                                                      })
+    
+    return dev_cost, dev_acc, dev_summary_loss, dev_summary_extra
+
+
 
 # Train loop
 config = tf.ConfigProto()
@@ -392,24 +419,8 @@ with tf.Session(config=config) as session:
 
     merged_extra_summary_op = tf.summary.merge(extra_summaries)
 
-#    merged_summary_op = tf.summary.merge_all()
 
     print "NETWORK PARAMETER COUNT", np.sum([np.prod(v.shape) for v in tf.trainable_variables()])
-
-    # # log settings in tensorboard
-    # all_vars = [(k,v) for (k,v) in locals().copy().items() if (k.isupper() and k!='T' and k!='SETTINGS' and k!='ALL_SETTINGS')]
-    # all_vars = sorted(all_vars, key=lambda x: x[0])
-    # settings_string = "\n".join(["{}: {}".format(var_name, var_value) for var_name, var_value in all_vars])
-    # print settings_string
-    # settings_summary = tf.Summary(value=[
-    #     tf.Summary.Value(tag="settings summary", simple_value=settings_string), 
-    # ])
-    # test_writer.add_summary(settings_summary)
-    # train_writer.add_summary(settings_summary)
-
-
-
-
     for iteration in xrange(ITERS+1):
         start_time = time.time()
 
@@ -430,69 +441,58 @@ with tf.Session(config=config) as session:
         train_writer.add_summary(summary_loss, iteration)
         train_acc = accuracy(_disc_real, _real_data[1])
         train_summary_acc = tf.Summary(value=[
-            tf.Summary.Value(tag="accuracy", simple_value=train_acc),
+            tf.Summary.Value(tag="train_accuracy", simple_value=train_acc),
         ])
         train_writer.add_summary(train_summary_acc, iteration)
 
         # Calculate dev loss and generate samples every 100 iters
         if iteration <= 5 or iteration % 500 == 0:
-            dev_disc_costs = []
-            dev_real_disc_outputs = []
-            dev_real_labels = []
-            dev_real_data = []
-
-            for _real_data_test in data.classifier_generator((X_test, y_test), BATCH_SIZE, infinity=False):
-                _dev_disc_cost, _dev_real_disc_output = session.run(
-                    [disc_cost, disc_real],
-                    feed_dict={
-                        real_data: _real_data_test[0], real_labels: _real_data_test[1], dropout:1.0}
-                )
-                dev_disc_costs.append(_dev_disc_cost)
-                dev_real_disc_outputs.append(_dev_real_disc_output)
-                dev_real_labels.append(_real_data_test[1])
-                dev_real_data.append(_real_data_test[0])
-
-            dev_real_disc_outputs = np.concatenate(dev_real_disc_outputs)
-            dev_real_labels = np.concatenate(dev_real_labels)
-            dev_real_data = np.concatenate(dev_real_data)
-            dev_cost = np.mean(dev_disc_costs)
-            dev_acc = accuracy(dev_real_disc_outputs, dev_real_labels)
             print "TRAIN ACCURACY", train_acc
+            dev_cost, dev_acc, dev_summary_loss, dev_summary_extra = evaluate(X_devel, y_devel)
             print "DEVEL ACCURACY", dev_acc
-
             lib.plot.plot('dev disc cost', dev_cost)
-
-            if iteration % 2500 == 0:
-                saver = tf.train.Saver()
-                saver.save(session, os.path.join(LOG_DIR, "model.ckpt"), iteration)
-
-            dev_summary_loss, dev_summary_extra = session.run([merged_loss_summary_op, merged_extra_summary_op],
-                                                              feed_dict={
-                                                                  dropout: 1.0,
-                                                                  real_data: _real_data_test[0],
-                                                                  real_labels: _real_data_test[1]
-                                                              })
             dev_summary_acc = tf.Summary(value=[
-                tf.Summary.Value(tag="accuracy", simple_value=dev_acc), 
+                tf.Summary.Value(tag="devel_accuracy", simple_value=dev_acc), 
             ])
+            test_writer.add_summary(dev_summary_acc, iteration)
             test_writer.add_summary(dev_summary_loss, iteration)
             test_writer.add_summary(dev_summary_extra, iteration)
-            test_writer.add_summary(dev_summary_acc, iteration)
 
+            # log extras for the trainset
             summary_extra = session.run(
                 [merged_extra_summary_op],
                 feed_dict={
                     real_data: _real_data[0], real_labels: _real_data[1], dropout:1.0}
             )
             train_writer.add_summary(summary_extra[0], iteration)
-
+            
             sys.stdout.flush()
-
-        # Write logs every 100 iters
-        if (iteration <= 5) or (iteration % 500 == 0):
             lib.plot.flush()
+
+        # if iteration % 2500 == 0:
+        #     saver = tf.train.Saver()
+        #     saver.save(session, os.path.join(LOG_DIR, "model.ckpt"), iteration)
 
         lib.plot.tick()
 
+    # final test results
+    test_cost, test_acc, _, _ = evaluate(X_test, y_test)
+    print "TEST ACCURACY", test_acc
+    lib.plot.plot('test disc cost', test_cost)
+    test_summary_acc = tf.Summary(value=[
+        tf.Summary.Value(tag="test_accuracy", simple_value=test_acc), 
+    ])
+    test_writer.add_summary(test_summary_acc, iteration)
+        
+
+
+
 program_end_time = time.time()
 print "Total time: " + str(program_end_time - program_start_time)
+
+
+
+
+
+
+
