@@ -222,7 +222,7 @@ def get_slopes(input):
             jacobians = util.jacobian_by_batch(tf.nn.softmax(output), input) 
         else:
             jacobians = util.jacobian_by_batch(output, input)
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(jacobians), reduction_indices=[1,2]))
+        slopes = tf.sqrt(1e-16 + tf.reduce_sum(tf.square(jacobians), reduction_indices=[1,2]))
     return slopes
 
 loss_list = []
