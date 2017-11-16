@@ -117,7 +117,7 @@ def types_jacreg_lenettuned(record):
 
 
 # for visualizing grid_mnist_onehot.sh results for lenet
-# python stat.py logs accuracy test 10000 -type_grouping onehot_lenet
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_onehot accuracy test 10000 -type_grouping onehot_lenet
 def types_onehot_lenet(record):
     if record['net'] != "lenet":
         return None
@@ -128,7 +128,7 @@ def types_onehot_lenet(record):
 
     
 # for visualizing grid_mnist_onehot.sh results for lenettuned
-# python stat.py logs accuracy test 10000 -type_grouping onehot_lenettuned
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_onehot accuracy test 10000 -type_grouping onehot_lenettuned
 def types_onehot_lenettuned(record):
     if record['net'] != "lenettuned":
         return None

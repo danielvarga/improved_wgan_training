@@ -66,7 +66,7 @@ STEEP_HALF_PARABOLA, GENTLE_HALF_PARABOLA, L2, PARABOLA = 1, 2, 3, 4
 GP_VERSION = L2
 MEMORY_SHARE=0.3
 
-COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax" / "topk"
+COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax" / "topk" / "random_onehot"
 COMBINE_TOPK = None
 DATAGRAD = 0
 DROPOUT_KEEP_PROB=0.5
@@ -156,7 +156,7 @@ dropout = tf.placeholder("float")
 Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT, REUSE_BATCHNORM=True, dropout=dropout, wideness=WIDENESS)
 
 real_labels = tf.placeholder(tf.uint8, shape=[BATCH_SIZE])
-real_labels_onehot = tf.one_hot(real_labels, 10)
+real_labels_onehot = tf.one_hot(real_labels, OUTPUT_COUNT)
 
 real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, INPUT_DIM])
 disc_real = Discriminator(real_data)
@@ -209,6 +209,10 @@ def get_slopes(input):
             res = tf.sparse_to_dense(full_indices, output.get_shape(), tf.reshape(tf.ones_like(values), [-1]), default_value=0., validate_indices=False)
 
             gradients = tf.gradients(output * res, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "random_onehot":
+            random_indices = tf.random_uniform(shape=(BATCH_SIZE,), minval=0, maxval=OUTPUT_COUNT-1, dtype=tf.int32) 
+            random_onehot = tf.one_hot(random_indices, OUTPUT_COUNT)
+            gradients = tf.gradients(output * random_onehot, [input])[0]
         else:
             assert False, "Not supported COMBINE_OUTPUTS_MODE: " + COMBINE_OUTPUTS_MODE
 
