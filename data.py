@@ -52,11 +52,13 @@ def load_raw_data(dataset, seed=None):
         y_test = y_test[sh]
         np.random.set_state(state)
 
-    # X_train = featurewise_std_normalization(featurewise_center(X_train))
-    # X_test = featurewise_std_normalization(featurewise_center(X_test))
+    # since we have already been using the test set for calibration, we switch the roles of the devel set and the test set
+    X_devel2 = X_test
+    y_devel2 = y_test
+    X_test2 = X_devel
+    y_test2 = y_devel
 
-
-    return (X_train, y_train), (X_devel, y_devel), (X_test, y_test)
+    return (X_train, y_train), (X_devel2, y_devel2), (X_test2, y_test2)
 
 
 # def load_pairs(dataset, target_digits, train_dataset_size):
