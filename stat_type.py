@@ -3,29 +3,16 @@
 def get_type(record, type_grouping):
     if type_grouping == None:
         return basic_types(record)
-    elif type_grouping == "datagrad_lenet":
-        return types_datagrad_lenet(record)
-    elif type_grouping == "datagrad_lenettuned":
-        return types_datagrad_lenettuned(record)
-    elif type_grouping == "entropy_lenet":
-        return types_entropy_lenet(record)
-    elif type_grouping == "entropy_lenettuned":
-        return types_entropy_lenettuned(record)
-    elif type_grouping == "gp_lenet":
-        return types_gp_lenet(record)
-    elif type_grouping == "gp_lenettuned":
-        return types_gp_lenettuned(record)
-    elif type_grouping == "onehot_lenet":
-        return types_onehot_lenet(record)
-    elif type_grouping == "onehot_lenettuned":
-        return types_onehot_lenettuned(record)
-    elif type_grouping == "jacreg_lenet":
-        return types_jacreg_lenet(record)
-    elif type_grouping == "jacreg_lenettuned":
-        return types_jacreg_lenettuned(record)
 
-    else:
-        assert False
+    type_function = "types_" + type_grouping
+    try:
+        fun = globals()[type_function]
+    except:
+        c += 1
+        print "Unrecognized type_grouping " + type_grouping + ", using function basic_types instead of " + type_function
+        return basic_types(record)
+    return fun(record)
+
 
 # this is called when no type grouping is specified
 def basic_types(record):
@@ -36,6 +23,15 @@ def basic_types(record):
     type += "-bn_" + str(record['bn'])
     type += "-wd_" + str(record['wd'])
     return type
+
+# for visualizing grid_mnist_compare2000.sh results for lenet
+# python stat.py logs test_accuracy test 10000 -type_grouping dg_gp_ent_lenet
+def types_dg_gp_ent_lenet(record):
+    if record['net'] != "lenet":
+        return None
+    else:
+        return "dg_%d-gp_%04.2f-ent_%04.2f" % (record['dg'], record['lambda'], record['ent'])
+
 
 # for visualizing grid_mnist_datagrad.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_datagrad accuracy test 10000 -type_grouping datagrad_lenet
