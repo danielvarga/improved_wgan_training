@@ -32,6 +32,10 @@ def types_dg_gp_ent_lenet(record):
     else:
         return "dg_%d-gp_%04.2f-ent_%04.2f" % (record['dg'], record['lambda'], record['ent'])
 
+# for visualizing grid_mnist_compare2000_onehot.sh results
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_compare2000_onehot test_accuracy test 10000 -type_grouping random_onehot_lenet -x_key net
+def types_random_onehot_lenet(record):
+    return record['comb'] + str(record['lambda'])
 
 # for visualizing grid_mnist_datagrad.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_datagrad accuracy test 10000 -type_grouping datagrad_lenet
