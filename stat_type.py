@@ -34,6 +34,8 @@ def types_mnist_4(record):
         return "DataGrad"
     elif record['ent'] > 0:
         return "EntReg"
+    else:
+        return "blabla"
     return None
 
 

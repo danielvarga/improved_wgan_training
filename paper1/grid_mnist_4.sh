@@ -35,7 +35,7 @@ do
 		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=$DATAGRAD > couts/$NAME.DataGrad_DATAGRAD_${DATAGRAD}_${C}.cout 2> couts/$NAME.DataGrad_DATAGRAD_${DATAGRAD}_${C}.cerr
 
 		# EntReg
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --EP=$EP > couts/$NAME.EntReg_EP_${EP}_${C}.cout 2> couts/$NAME.EntReg_EP_${EP}_${C}.cerr
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --ENTROPY_PENALTY=$EP > couts/$NAME.EntReg_EP_${EP}_${C}.cout 2> couts/$NAME.EntReg_EP_${EP}_${C}.cerr
 
 		# JacReg
 		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$LAMBDA --COMBINE_OUTPUTS_FOR_SLOPES=False --COMBINE_OUTPUTS_MODE=softmax > couts/$NAME.JacReg_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.JacReg_LAMBDA_${LAMBDA}_${C}.cerr
