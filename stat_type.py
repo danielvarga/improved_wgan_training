@@ -8,7 +8,6 @@ def get_type(record, type_grouping):
     try:
         fun = globals()[type_function]
     except:
-        c += 1
         print "Unrecognized type_grouping " + type_grouping + ", using function basic_types instead of " + type_function
         return basic_types(record)
     return fun(record)
@@ -24,13 +23,42 @@ def basic_types(record):
     type += "-wd_" + str(record['wd'])
     return type
 
+# for visualizing grid_mnist_4.sh results for lenet
+# python stat.py logs test_accuracy test 10000 -type_grouping mnist_4
+def types_mnist_4(record):
+    if record['combslopes'] == 'n':
+        return "JacReg"
+    elif record['lambda'] > 0:
+        return "SpectReg"
+    elif record['dg'] > 0:
+        return "DataGrad"
+    elif record['ent'] > 0:
+        return "EntReg"
+    return None
+
+
 # for visualizing grid_mnist_compare2000.sh results for lenet
-# python stat.py logs test_accuracy test 10000 -type_grouping dg_gp_ent_lenet
+# python stat.py logs test_accuracy test 10000 -type_grouping dg_gp_ent_lenet -x_key ent
 def types_dg_gp_ent_lenet(record):
     if record['net'] != "lenet":
         return None
+    if record['ent'] > 0 and record['dg'] == 50:
+        return None
+    if record['ent'] == 0 and record['dg'] == 10:
+        return None
+    return "dg_%d-gp_%04.2f" % (record['dg'], record['lambda'])
+
+# for visualizing grid_mnist_compare2000.sh results for lenettuned
+# python stat.py logs test_accuracy test 10000 -type_grouping dg_gp_ent_lenettuned -x_key ent
+def types_dg_gp_ent_lenettuned(record):
+    if record['net'] != "lenettuned":
+        return None
+    if record['ent'] > 0 and record['dg'] == 50:
+        return None
+    if record['ent'] == 0 and record['dg'] == 10:
+        return None
     else:
-        return "dg_%d-gp_%04.2f-ent_%04.2f" % (record['dg'], record['lambda'], record['ent'])
+        return "dg_%d-gp_%04.2f" % (record['dg'], record['lambda'])
 
 
 # for visualizing grid_mnist_datagrad.sh results for lenet
@@ -133,6 +161,14 @@ def types_onehot_lenettuned(record):
     else:
         return "lambda %06.4f" % record['lambda']
 
+# comparing WD for grid_lenet_baseline_2000.sh
+# python stat.py /mnt/g2big/tensorboard_logs/archive_log/lenet_baseline_2000 accuracy test 10000 -type_grouping lenet_baseline_2000
+def types_lenet_baseline_2000(record):
+    try:
+        wd = float(record['wd'])
+    except:
+        return None
+    return "wd_%07.5f" % wd
 
 def compare_mnist_1_tune(record):
     if record['bn'] == "y":
