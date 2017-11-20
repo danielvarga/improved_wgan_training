@@ -60,6 +60,17 @@ def types_dg_gp_ent_lenettuned(record):
     else:
         return "dg_%d-gp_%04.2f" % (record['dg'], record['lambda'])
 
+# for visualizing grid_mnist_compare2000_onehot.sh results
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_compare2000_onehot test_accuracy test 10000 -type_grouping random_onehot_lenet -x_key net
+def types_random_onehot_lenet(record):
+    net = record['net']
+    comb = record['comb']
+    lb = record['lambda']
+    if net == "lenet" and lb != 0.3:
+        return None
+    if net == "lenettuned" and lb != 0.1:
+        return None
+    return comb + "-" + str(lb)
 
 # for visualizing grid_mnist_datagrad.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_datagrad accuracy test 10000 -type_grouping datagrad_lenet
@@ -161,63 +172,47 @@ def types_onehot_lenettuned(record):
     else:
         return "lambda %06.4f" % record['lambda']
 
-# comparing WD for grid_lenet_baseline_2000.sh
-# python stat.py /mnt/g2big/tensorboard_logs/archive_log/lenet_baseline_2000 accuracy test 10000 -type_grouping lenet_baseline_2000
-def types_lenet_baseline_2000(record):
-    try:
-        wd = float(record['wd'])
-    except:
-        return None
-    return "wd_%07.5f" % wd
-
-def compare_mnist_1_tune(record):
-    if record['bn'] == "y":
-        return None
-    elif record['do'] == 1:
-        type = 'no'
-    else:
-        type = 'do'
-    if record['lambda'] > 0:
-        return None
-    return type
-
-def compare_mnist_1(record):
+# for visualizing grid_mnist_1.sh results for lenet
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_1 accuracy test 10000 -type_grouping mnist_1 -x_key reg
+def types_mnist_1(record):
     if record['bn'] == "y":
         if record['dg'] == 0.001:
             return "DataGrad"
         elif record['lambda'] == 0.001:
-            return "SpecReg"
+            return "SpectReg"
         elif record['lambda'] == 0 and record['dg'] == 0:
-            return "Unreg"
+            return "NoGP"
         else:
             return None
-
     if record['dg'] == 50:
         return "DataGrad"
     elif record['lambda'] == 0.01:
-        return "SpecReg"
+        return "SpectReg"
     elif record['lambda'] == 0 and record['dg'] == 0:
-        return "Unreg"
+        return "NoGP"
     return None
 
-def compare_mnist_1b(record):
+# for visualizing grid_mnist_1b.sh results for lenettuned
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_1b accuracy test 10000 -type_grouping mnist_1b -x_key reg
+def types_mnist_1b(record):
     if record['bn'] == "y":
         if record['dg'] == 0.003:
             return "DataGrad"
         elif record['lambda'] == 0.003:
-            return "SpecReg"
+            return "SpectReg"
         elif record['lambda'] == 0 and record['dg'] == 0:
-            return "Unreg"
+            return "NoGR"
         else:
             return None
 
     if record['dg'] == 50:
         return "DataGrad"
     elif record['lambda'] == 0.01:
-        return "SpecReg"
+        return "SpectReg"
     elif record['lambda'] == 0 and record['dg'] == 0:
-        return "Unreg"
+        return "NoGR"
     return None
+
 
 
 def compare_mnist_2(record):
