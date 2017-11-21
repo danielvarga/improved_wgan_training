@@ -24,7 +24,7 @@ def basic_types(record):
     return type
 
 # for visualizing grid_mnist_4.sh results for lenet
-# python stat.py logs test_accuracy test 10000 -type_grouping mnist_4
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_4 test_accuracy test 10000 -type_grouping mnist_4
 def types_mnist_4(record):
     if record['combslopes'] == 'n':
         return "JacReg"
@@ -35,8 +35,7 @@ def types_mnist_4(record):
     elif record['ent'] > 0:
         return "EntReg"
     else:
-        return "blabla"
-    return None
+        return "Unreg"
 
 # for visualizing grid_mnist_6.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_6 test_accuracy test 10000 -type_grouping mnist_6

@@ -1,4 +1,5 @@
 # Compare DataGrad, SpectReg, EntReg, JacReg on different training sizes
+# use the baseline as well
 
 NAME=mnist_4
 mkdir -p couts/
@@ -18,7 +19,7 @@ for C in `seq 1 1 10`
 do
     echo ITER $C
 	echo NET $NET
-	for i in `seq 1 1 8`
+	for i in `seq 0 1 7`
 	do
 		TRAIN=${TRAINS[i]}
 		DATAGRAD=${DATAGRADS[i]}
@@ -27,6 +28,9 @@ do
 		JAC_LAMBDA=${JAC_LAMBDAS[i]}
 
 		COMMON_ARGS="--MEMORY_SHARE=0.45 --RANDOM_SEED=$C --LEARNING_RATE_DECAY=$LRD --WEIGHT_DECAY=$WD --DISC_TYPE=$NET --TRAIN_DATASET_SIZE=$TRAIN"
+
+		# Baseline
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS > couts/$NAME.Unreg_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.Unreg_LAMBDA_${LAMBDA}_${C}.cerr
 
 		# SpectReg
 		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$LAMBDA > couts/$NAME.SpectReg_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.SpectReg_LAMBDA_${LAMBDA}_${C}.cerr
@@ -39,7 +43,7 @@ do
 
 		# JacReg
 		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$LAMBDA --COMBINE_OUTPUTS_FOR_SLOPES=False --COMBINE_OUTPUTS_MODE=softmax > couts/$NAME.JacReg_LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.JacReg_LAMBDA_${LAMBDA}_${C}.cerr
-
+	   
 	done
 done
 
