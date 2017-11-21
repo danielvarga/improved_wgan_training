@@ -39,14 +39,23 @@ def types_mnist_4(record):
     return None
 
 # for visualizing grid_mnist_6.sh results for lenet
-# python stat.py logs test_accuracy test 10000 -type_grouping mnist_6
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_6 test_accuracy test 10000 -type_grouping mnist_6
 def types_mnist_6(record):
     if record['comb'] == 'softmax':
-        return "Frob-" + str(record['lambda'])
-    elif record['combslopes'] == 'n':
         return "JacReg"
+    elif record['comb'] == 'onehot':
+        return "Onehot"
+    elif record['comb'] == 'random_onehot':
+        return "Random Onehot"    
+    elif record['combslopes'] == 'n':
+        if record['lambda'] == 0.03:
+            return "Frob"
+        else:
+            return None
     elif record['lambda'] > 0:
         return "SpectReg"
+    elif record['dg'] > 0:
+        return "DataGrad"
     else:
         return "blabla"
 
