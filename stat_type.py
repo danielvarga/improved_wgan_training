@@ -37,6 +37,18 @@ def types_mnist_4(record):
     else:
         return "Unreg"
 
+# for visualizing grid_mnist_6.sh results for lenet
+# python stat.py logs test_accuracy test 10000 -type_grouping mnist_6
+def types_mnist_6(record):
+    if record['comb'] == 'softmax':
+        return "Frob-" + str(record['lambda'])
+    elif record['combslopes'] == 'n':
+        return "JacReg"
+    elif record['lambda'] > 0:
+        return "SpectReg"
+    else:
+        return "blabla"
+
 
 # for visualizing grid_mnist_compare2000.sh results for lenet
 # python stat.py logs test_accuracy test 10000 -type_grouping dg_gp_ent_lenet -x_key ent
