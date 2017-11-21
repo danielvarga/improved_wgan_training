@@ -36,10 +36,14 @@ def load_raw_data(dataset, seed=None):
     X_test = np.transpose(X_test, axes=(0,3,1,2))
 
     # save last 10000 from X_train, y_train for development set
-    X_devel = X_train[-10000:]
-    y_devel = y_train[-10000:]
-    X_train = X_train[:-10000]
-    y_train = y_train[:-10000]
+    if dataset == "cifar10" or dataset == "cifar100":
+        X_devel = X_test
+        y_devel = y_test
+    else:
+        X_devel = X_train[-10000:]
+        y_devel = y_train[-10000:]
+        X_train = X_train[:-10000]
+        y_train = y_train[:-10000]
 
     if seed is not None:
         state = np.random.get_state()
