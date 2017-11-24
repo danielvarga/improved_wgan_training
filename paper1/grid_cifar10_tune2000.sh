@@ -5,7 +5,6 @@ mkdir -p couts/
 echo $NAME
 
 D=0
-WD=0.003
 TRAIN=2000
 LRD=piecewise
 NET=cifarResnet
@@ -15,54 +14,37 @@ ITERS=10000
 BS=128
 BN=True
 
-for C in `seq 1 1 2`
+for C in `seq 1 1 1`
 do
     echo ITER $C
-	COMMON_ARGS="--RANDOM_SEED=$C --MEMORY_SHARE=0.95 --DATASET=cifar10 --ITERS=$ITERS --BATCH_SIZE=$BS --LEARNING_RATE=$LEARNING_RATE --LEARNING_RATE_DECAY=$LRD --WEIGHT_DECAY=$WD --DISC_TYPE=$NET --WIDENESS=$WIDENESS --DO_BATCHNORM=$BN --TRAIN_DATASET_SIZE=$TRAIN"
-
-	echo SpectReg
-	for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1 0.3 1
+	for AUG in True False
 	do
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$W > couts/$NAME.SpectReg_W_${W}_${C}.cout 2> couts/$NAME.SpectReg_W_${W}_${C}.cerr
+		for WD in 0.0001
+		do
+			COMMON_ARGS="--RANDOM_SEED=$C --MEMORY_SHARE=0.95 --DATASET=cifar10 --ITERS=$ITERS --BATCH_SIZE=$BS --LEARNING_RATE=$LEARNING_RATE --LEARNING_RATE_DECAY=$LRD --WEIGHT_DECAY=$WD --DISC_TYPE=$NET --WIDENESS=$WIDENESS --DO_BATCHNORM=$BN --TRAIN_DATASET_SIZE=$TRAIN --AUGMENTATION=$AUG"
+
+			# baseline
+			CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS > couts/$NAME.unreg_aug_${AUG}_WD_${WD}_${C}.cout 2> couts/$NAME.unreg_aug_${AUG}_WD_${WD}_${C}.cerr
+
+			echo SpectReg
+			for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1
+			do
+				CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$W > couts/$NAME.SpectReg_W_${W}_${AUG}_WD_${WD}_${C}.cout 2> couts/$NAME.SpectReg_W_${W}_${AUG}_WD_${WD}_${C}.cerr
+			done
+
+			echo DataGrad
+			for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1 0.3 1
+			do
+				CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=$W > couts/$NAME.DataGrad_W_${W}_${AUG}_WD_${WD}_${C}.cout 2> couts/$NAME.DataGrad_W_${W}_${AUG}_WD_${WD}_${C}.cerr
+			done
+
+			echo EntReg
+			for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1 0.3 1
+			do
+				CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --ENTROPY_PENALTY=$W > couts/$NAME.EntReg_W_${W}_${AUG}_WD_${WD}_${C}.cout 2> couts/$NAME.EntReg_W_${W}_${AUG}_WD_${WD}_${C}.cerr
+			done
+		done
 	done
-
-	echo DataGrad
-	for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1 0.3 1
-	do
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=$W > couts/$NAME.DataGrad_W_${W}_${C}.cout 2> couts/$NAME.DataGrad_W_${W}_${C}.cerr
-	done
-
-	echo EntReg
-	for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1 0.3 1
-	do
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --ENTROPY_PENALTY=$W > couts/$NAME.EntReg_W_${W}_${C}.cout 2> couts/$NAME.EntReg_W_${W}_${C}.cerr
-	done
-
-	echo JacReg
-	for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1 0.3 1
-	do
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$W --COMBINE_OUTPUTS_FOR_SLOPES=False --COMBINE_OUTPUTS_MODE=softmax > couts/$NAME.JacReg_W_${W}_${C}.cout 2> couts/$NAME.JacReg_W_${W}_${C}.cerr
-	done
-
-	echo FrobReg
-	for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1 0.3 1
-	do
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$W --COMBINE_OUTPUTS_MODE=False > couts/$NAME.FrobReg_W_${W}_${C}.cout 2> couts/$NAME.FrobReg_W_${W}_${C}.cerr
-	done
-
-	echo Onehot
-	for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1 0.3 1
-	do
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$W --COMBINE_OUTPUTS_MODE=onehot > couts/$NAME.Onehot_W_${W}_${C}.cout 2> couts/$NAME.Onehot_W_${W}_${C}.cerr
-	done
-
-	echo RandomOnehot
-	for W in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1 0.3 1
-	do
-		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$W --COMBINE_OUTPUTS_MODE=random_onehot > couts/$NAME.RandomOnehot_W_${W}_${C}.cout 2> couts/$NAME.RandomOnehot_W_${W}_${C}.cerr
-	done
-
-
 done
 
 echo "DONE"
