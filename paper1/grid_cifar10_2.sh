@@ -1,0 +1,36 @@
+NAME=cifar10_2
+mkdir -p couts/
+echo $NAME
+
+D=1
+DATASET=cifar10
+ITERS=50000
+BS=128
+LR=0.1
+LRD=piecewise
+WD=0.003
+NET=cifarResnet
+WIDENESS=3
+BN=True
+TRAIN=2000
+AUGMENTATION=False
+EP=0.003
+
+COMMON_ARGS="--MEMORY_SHARE=0.95 --DATASET=$DATASET --ITERS=$ITERS --BATCH_SIZE=$BS --LEARNING_RATE=$LR --LEARNING_RATE_DECAY=$LRD --WEIGHT_DECAY=$WD --DISC_TYPE=$NET --WIDENESS=$WIDENESS --DO_BATCHNORM=$BN --TRAIN_DATASET_SIZE=$TRAIN --AUGMENTATION=$AUGMENTATION"
+
+for C in `seq 1 1 10`
+do
+    echo ENTREG $C
+    CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --RANDOM_SEED=$C --ENTROPY_PENALTY=$EP > couts/$NAME.EntReg_EP_${EP}_${C}.cout 2> couts/$NAME.EntReg_EP_${EP}_${C}.cerr
+done
+
+for C in `seq 1 1 2`
+do
+	for DG in 0.0001 0.0003 0.001 0.003 0.01 0.03 0.1
+	do
+		echo DATAGRAD_ENTREG $DG
+		CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --RANDOM_SEED=$C --ENTROPY_PENALTY=$EP --DATAGRAD=$DG > couts/$NAME.EP_${EP}_DG_${DG}_${C}.cout 2> couts/$NAME.EP_${EP}_DG_${DG}_${C}.cerr
+	done
+done
+
+echo "DONE"
