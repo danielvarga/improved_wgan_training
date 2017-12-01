@@ -1,0 +1,28 @@
+NAME=cifar10_baseline
+mkdir -p couts/
+echo $NAME
+
+D=0
+DATASET=cifar10
+ITERS=50000
+BS=128
+LR=0.01
+LRD=piecewise
+WD=0.003
+NET=cifarResnet
+BN=True
+TRAIN=2000
+AUGMENTATION=False
+
+for C in `seq 1 1 1`
+do
+
+    for WIDENESS in 1 2 3
+    do
+	COMMON_ARGS="--MEMORY_SHARE=0.95 --DATASET=$DATASET --ITERS=$ITERS --BATCH_SIZE=$BS --LEARNING_RATE=$LR --LEARNING_RATE_DECAY=$LRD --WEIGHT_DECAY=$WD --DISC_TYPE=$NET --WIDENESS=$WIDENESS --DO_BATCHNORM=$BN --TRAIN_DATASET_SIZE=$TRAIN --AUGMENTATION=$AUGMENTATION"
+	
+	CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --RANDOM_SEED=$C > couts/$NAME.${C}.cout 2> couts/$NAME.${C}.cerr
+    done
+done
+
+echo "DONE"
