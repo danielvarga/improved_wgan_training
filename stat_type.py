@@ -236,7 +236,7 @@ def types_mnist_1b(record):
 
 
 # for visualizing grid_mnist_2.sh results for lenet
-# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_2 accuracy test 10000 -type_grouping mnist_2
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_2 test_accuracy test 10000 -type_grouping mnist_2
 def types_mnist_2(record):
     return str(record['ent']) + "_" + str(record['dg'])
 
