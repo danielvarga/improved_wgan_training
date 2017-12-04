@@ -30,7 +30,7 @@ do
     CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --DATAGRAD=$DG > couts/$NAME.DG_${DG}_${C}.cout 2> couts/$NAME.DG_${DG}_${C}.cerr
 
     echo SPECTREG
-    CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$DG > couts/$NAME.LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.LAMBDA_${LAMBDA}_${C}.cerr
+    CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --LAMBDA=$LAMBDA > couts/$NAME.LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.LAMBDA_${LAMBDA}_${C}.cerr
 
     echo ENTREG
     CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --ENTROPY_PENALTY=$EP > couts/$NAME.EP_${EP}_${C}.cout 2> couts/$NAME.EP_${EP}_${C}.cerr
