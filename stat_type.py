@@ -250,18 +250,18 @@ def types_mnist_1b(record):
 # for visualizing grid_mnist_2.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_2 test_accuracy test 10000 -type_grouping mnist_2
 def types_mnist_2(record):
-    return str(record['ent']) + "_" + str(record['dg'])
-
-    # # compare unreg, datagrad, ent, ent+datagrad
-    # if record['dg'] != 0 and record['ent'] > 0:
-    #     type = "ent+dg"
-    # elif record['dg'] != 0:
-    #     type = "dg"
-    # elif record['ent'] > 0:
-    #     type = "ent"
-    # else:
-    #     type = "unreg"
-    # return type
+    if record['dg'] > 0 and record['ent'] > 0:
+        return "ent+dg"
+    elif record['lambda'] > 0 and record['ent'] > 0:
+        return "ent+spect"
+    elif record['dg'] > 0:
+        return "dg"
+    elif record['ent'] > 0:
+        return "ent"
+    elif record['lambda'] > 0:
+        return "spect"
+    else:
+        return "unreg"
     
     
 """
