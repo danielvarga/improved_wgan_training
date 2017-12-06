@@ -24,7 +24,7 @@ def basic_types(record):
     return type
 
 # for visualizing grid_cifar10_ent_dg_spect.sh results
-# python stat.py logs test_accuracy test 50000 -type_grouping cifar10_ent_dg_spect
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar10_ent_dg_spect test_accuracy test 50000 -type_grouping cifar10_ent_dg_spect
 def types_cifar10_ent_dg_spect(record):
     if record['ent'] > 0:
         return "EntReg"
