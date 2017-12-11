@@ -182,6 +182,7 @@ def get_slopes(input):
     if COMBINE_OUTPUTS_FOR_SLOPES:
         if COMBINE_OUTPUTS_MODE == "random":
             output_weights = tf.random_normal((OUTPUT_COUNT,))
+            # output_weights /= tf.sqrt(tf.reduce_sum(tf.square(output_weights)))
             gradients = tf.gradients(output * output_weights, [input])[0]
         elif COMBINE_OUTPUTS_MODE == "softmax":
             softmaxed = tf.nn.softmax(output)
