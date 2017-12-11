@@ -312,16 +312,17 @@ if ACTIVATION_PENALTY > 0:
     loss_list.append(('activation_loss', activation_loss))
 
 # weight regularization
+with tf.variable_scope('weights_norm') as scope:
+    weight_loss = tf.reduce_sum(
+        input_tensor = tf.stack(
+            #[tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+            [tf.nn.l2_loss(var) for var in disc_filters]
+        ),
+        name='weight_loss'
+    )
+
 if WEIGHT_DECAY > 0:
-    with tf.variable_scope('weights_norm') as scope:
-        weight_loss = tf.reduce_sum(
-            input_tensor = WEIGHT_DECAY*tf.stack(
-#                [tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
-                [tf.nn.l2_loss(var) for var in disc_filters]
-            ),
-            name='weight_loss'
-        )
-    disc_cost += weight_loss
+    disc_cost += WEIGHT_DECAY*weight_loss
 else:
     weight_loss = tf.constant(0.0)
 loss_list.append(('weight_loss', weight_loss))
