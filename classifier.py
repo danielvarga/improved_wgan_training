@@ -323,8 +323,6 @@ with tf.variable_scope('weights_norm') as scope:
 
 if WEIGHT_DECAY > 0:
     disc_cost += WEIGHT_DECAY*weight_loss
-else:
-    weight_loss = tf.constant(0.0)
 loss_list.append(('weight_loss', weight_loss))
 
 global_step = global_step = tf.Variable(0, trainable=False)
