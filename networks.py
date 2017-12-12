@@ -36,8 +36,6 @@ def Normalize(name, axes, inputs):
 def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=False, OUTPUT_COUNT=1, WEIGHT_NOISE_SIGMA=None, REUSE_BATCHNORM=False, dropout=None, wideness=1):
 
     CHANNEL = INPUT_SHAPE[0]
-    assert INPUT_SHAPE[1] == INPUT_SHAPE[2]
-    WIDTH = INPUT_SHAPE[2]
 
     if REUSE_BATCHNORM:
         lib.ops.batchnorm.Batchnorm = lib.ops.batchnorm.Batchnorm_with_reuse
@@ -85,6 +83,8 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         output = LeakyReLU(output)
         output = tf.nn.max_pool(output, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
 
+        assert INPUT_SHAPE[1] == INPUT_SHAPE[2]
+        WIDTH = INPUT_SHAPE[2]
         w = WIDTH // (2 * 2 * 2)
 
         output = tf.reshape(output, [-1, w*w*4*DIM])
@@ -297,6 +297,23 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
 #        net = tf.nn.relu(net)
         return net
 
+    def ToyNet(inputs):
+        input_dim = np.prod(INPUT_SHAPE)
+        output = tf.reshape(inputs, [-1, input_dim])
+
+        output = lib.ops.linear.Linear('Discriminator.0', input_dim, DIM, output)
+        output = LeakyReLU(output, alpha=0.0)
+
+        for i in range(1, wideness):
+            output = lib.ops.linear.Linear('Discriminator.'+str(i), DIM, DIM, output)
+            output = LeakyReLU(output, alpha=0.0)
+            if DO_BATCHNORM:
+                print "!!!!!! Using batchnorm instead of dropout !!!!!!!"
+                output = lib.ops.batchnorm.Batchnorm("Discriminator.BN"+str(i), [0], output, fused=FUSED)
+
+        output = lib.ops.linear.Linear('Discriminator.output', DIM, OUTPUT_COUNT, output)
+        return output
+
 
     if disc_type == "conv":
         return ConvDiscriminator
@@ -312,6 +329,8 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         return LeNet
     elif disc_type == "lenettuned":
         return LeNet_tuned
+    elif disc_type == "toy":
+        return ToyNet
 
 
 

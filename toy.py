@@ -1,0 +1,548 @@
+import time
+import os, sys
+sys.path.append(os.getcwd())
+
+import time
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.ticker import LinearLocator
+from matplotlib import cm
+
+import numpy as np
+import sklearn.datasets
+import tensorflow as tf
+
+import tflib as lib
+import tflib.ops.linear
+import tflib.ops.conv2d
+import tflib.ops.batchnorm
+import tflib.ops.deconv2d
+import tflib.save_images
+import tflib.mnist
+import tflib.plot
+
+from tensorflow.contrib.tensorboard.plugins import projector
+import util
+import losses
+import data
+import networks
+import gan_logging
+
+
+
+LAMBDA = 0 # 1e-4 # Gradient penalty lambda hyperparameter
+WEIGHT_DECAY = 0
+GRADIENT_SHRINKING = False
+LIPSCHITZ_TARGET = 1.0
+SHRINKING_NORM_EMA_FACTOR = 1.0
+
+DIM = 64 # Width of dense layers
+BATCH_SIZE = 50 # Batch size
+ITERS = 10000 # How many iterations to train for
+DO_BATCHNORM = True
+ACTIVATION_PENALTY = 0.0
+ALPHA_STRATEGY = "real"
+SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
+COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
+LEARNING_RATE_DECAY = "piecewise"
+LEARNING_RATE = 0.01
+AUGMENTATION = False
+
+TRAIN_DATASET_SIZE = 100
+DEVEL_DATASET_SIZE = 200
+TEST_DATASET_SIZE = 400
+# BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
+OUTPUT_COUNT = 10
+DATASET="toy1" # cifar10 / mnist
+DISC_TYPE = "toy" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet"
+
+# Note that L2 ignores LIPSCHITZ_TARGET, while in all the PARABOLA versions
+# slope is first divided by LIPSCHITZ_TARGET.
+STEEP_HALF_PARABOLA, GENTLE_HALF_PARABOLA, L2, PARABOLA = 1, 2, 3, 4
+GP_VERSION = L2
+MEMORY_SHARE=0.3
+
+COMBINE_OUTPUTS_MODE = "random" # "random" / "onehot" / "softmax" / "topk" / "random_onehot"
+COMBINE_TOPK = None
+DATAGRAD = 0
+DROPOUT_KEEP_PROB=0.5
+LOSS_TYPE = "l2"
+INPUT_NOISE = 0.0
+
+ENTROPY_PENALTY = 0.0
+WIDENESS = 5 # THIS IS USED FOR THE DEPTH OF THE NET!!!
+
+RANDOM_SEED = None
+VERBOSITY=2 # VERBOSITY>=2: logs slopes, VERBOSITY>=3: logs weight and gradient histograms
+program_start_time = time.time()
+
+def heuristic_cast(s):
+    s = s.strip() # Don't let some stupid whitespace fool you.
+    if s=="None":
+        return None
+    elif s=="True":
+        return True
+    elif s=="False":
+        return False
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return s
+
+for k, v in [arg.split('=', 1) for arg in sys.argv[1:]]:
+    assert v != '', "Malformed command line"
+    assert k.startswith('--'), "Malformed arg %s" % k
+    k = k[2:]
+    assert k in locals(), "Unknown arg %s" % k
+    v = heuristic_cast(v)
+    print "Changing argument %s from default %s to %s" % (k, locals()[k], v)
+    locals()[k] = v
+
+
+assert LEARNING_RATE_DECAY in ("piecewise", "exponential", False)
+assert COMBINE_OUTPUTS_FOR_SLOPES in (True, False)
+
+if RANDOM_SEED is not None:
+    tf.set_random_seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+
+# if BALANCED:
+#     TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE * 10
+# else:
+TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
+if DO_BATCHNORM:
+    DROPOUT_KEEP_PROB = 1.0
+
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}-do_{}-w_{}-ts_{}".format(
+    DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
+    "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n",
+    "n" if not LEARNING_RATE_DECAY else LEARNING_RATE_DECAY,
+    LEARNING_RATE,
+    AUGMENTATION, BATCH_SIZE,
+    "y" if DO_BATCHNORM else "n",
+    GP_VERSION,
+    "y" if GRADIENT_SHRINKING else "n",
+    DATAGRAD,
+    COMBINE_OUTPUTS_MODE,
+    COMBINE_TOPK,
+    ENTROPY_PENALTY,
+    DROPOUT_KEEP_PROB,
+    WIDENESS,
+    time.strftime('%Y%m%d-%H%M%S'))
+
+(X_train, y_train), (X_devel, y_devel), (X_test, y_test) = data.load_set(DATASET, TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, seed=RANDOM_SEED)
+
+
+INPUT_SHAPE = X_train.shape[1:]
+INPUT_DIM = np.prod(INPUT_SHAPE)
+
+
+real_gen = data.regression_generator((X_train, y_train), BATCH_SIZE)
+
+lib.print_model_settings(locals().copy())
+
+dropout = tf.placeholder("float")
+
+assert len(y_train.shape) == 2
+OUTPUT_COUNT = y_train.shape[1]
+
+Discriminator = networks.Discriminator_factory(DISC_TYPE, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM, OUTPUT_COUNT, REUSE_BATCHNORM=True, dropout=dropout, wideness=WIDENESS)
+
+real_labels = tf.placeholder(tf.float32, shape=[BATCH_SIZE, OUTPUT_COUNT])
+#real_labels_onehot = tf.one_hot(real_labels, OUTPUT_COUNT)
+
+real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, INPUT_DIM])
+disc_real = Discriminator(real_data)
+
+if DISC_TYPE == "cifarResnet":
+    disc_params = tf.trainable_variables()
+else:
+    disc_params = lib.params_with_name('Discriminator')
+
+
+
+disc_filters = [param for param_name, param in lib._params.iteritems() if param_name.endswith("Filters") or param_name.endswith("W")]
+# filter_param_count = np.sum([np.prod(param.shape) for param in disc_filters])
+# param_count = np.sum([np.prod(param.shape) for param_name, param in lib._params.iteritems()])
+# param_count2 = np.sum([np.prod(param.shape) for param in tf.trainable_variables()])
+
+
+def activation_to_loss(activation):
+    return tf.reduce_mean(tf.maximum(0.0,tf.square(activation) - 1.0))
+
+def get_slopes(input):
+    output = Discriminator(input)
+    if COMBINE_OUTPUTS_FOR_SLOPES:
+        if COMBINE_OUTPUTS_MODE == "random":
+            output_weights = tf.random_normal((OUTPUT_COUNT,))
+            # output_weights /= tf.sqrt(tf.reduce_sum(tf.square(output_weights)))
+            gradients = tf.gradients(output * output_weights, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "softmax":
+            softmaxed = tf.nn.softmax(output)
+            # cond = tf.greater(softmaxed, 0.01)
+            # gradients = tf.gradients(output * tf.where(cond, softmaxed, 0.0*softmaxed), [input])[0]
+            gradients = tf.gradients(output * softmaxed, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "softmax2":
+            jacobians = util.jacobian_by_batch(output, input)
+            softmaxed = tf.nn.softmax(output)
+            softmaxed = tf.expand_dims(softmaxed, 2)
+            weighted_jacobians = jacobians * softmaxed
+            gradients = tf.reshape(weighted_jacobians, [BATCH_SIZE, -1])
+        elif COMBINE_OUTPUTS_MODE == "onehot":
+            gradients = tf.gradients(output * real_labels_onehot, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "topk":
+            k = COMBINE_TOPK
+            values, indices = tf.nn.top_k(output, k)
+
+            my_range = tf.expand_dims(tf.range(0, indices.get_shape()[0]), 1)
+            my_range_repeated = tf.tile(my_range, [1, k])
+
+            full_indices = tf.concat([tf.expand_dims(my_range_repeated, 2), tf.expand_dims(indices, 2)],2)
+            full_indices = tf.reshape(full_indices, [-1, 2])
+
+            res = tf.sparse_to_dense(full_indices, output.get_shape(), tf.reshape(tf.ones_like(values), [-1]), default_value=0., validate_indices=False)
+
+            gradients = tf.gradients(output * res, [input])[0]
+        elif COMBINE_OUTPUTS_MODE == "random_onehot":
+            random_indices = tf.random_uniform(shape=(BATCH_SIZE,), minval=0, maxval=OUTPUT_COUNT-1, dtype=tf.int32) 
+            random_onehot = tf.one_hot(random_indices, OUTPUT_COUNT)
+            gradients = tf.gradients(output * random_onehot, [input])[0]
+        else:
+            assert False, "Not supported COMBINE_OUTPUTS_MODE: " + COMBINE_OUTPUTS_MODE
+
+        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+    else:
+        if COMBINE_OUTPUTS_MODE == "softmax": # this is the true JacReg version
+            jacobians = util.jacobian_by_batch(tf.nn.softmax(output), input) 
+        else:
+            jacobians = util.jacobian_by_batch(output, input)
+        slopes = tf.sqrt(1e-16 + tf.reduce_sum(tf.square(jacobians), reduction_indices=[1,2]))
+    return slopes
+
+loss_list = []
+
+assert ALPHA_STRATEGY in ("real", "random", "real_plus_noise"), "In the disciminative setup only real and random are supported"
+interpolates = losses.get_slope_samples(real_data, real_data, ALPHA_STRATEGY, BATCH_SIZE)
+slopes = get_slopes(interpolates)
+
+real_plus_noise_points = losses.get_slope_samples(real_data, real_data, "real_plus_noise",  BATCH_SIZE)
+real_plus_noise_slopes = get_slopes(real_plus_noise_points)
+
+if SHRINKING_REDUCTOR == "mean":
+    grad_norm = tf.reduce_mean(slopes)
+elif SHRINKING_REDUCTOR == "max":
+    grad_norm = tf.reduce_max(slopes)
+elif SHRINKING_REDUCTOR == "logsum":
+    grad_norm = tf.reduce_logsumexp(slopes)
+elif SHRINKING_REDUCTOR == "none":
+    grad_norm = slopes
+
+
+if GRADIENT_SHRINKING:
+    print "gradient shrinking"
+
+    if SHRINKING_NORM_EMA_FACTOR != 1.0:
+        print "gradient shrinking using moving_grad_norm"
+        batch_grad_norm = grad_norm
+
+        moving_grad_norm = lib.param("shrinking.moving_grad_norm", np.ones([]), dtype=tf.float32, trainable=False)
+        ema_factor = float(SHRINKING_NORM_EMA_FACTOR)
+        # for CMA: update_moving_grad_norm_op = tf.assign(moving_grad_norm, ((float_stats_iter/(float_stats_iter+1))*moving_grad_norm) + ((1/(float_stats_iter+1))*batch_grad_norm))
+        update_moving_grad_norm_op = tf.assign(moving_grad_norm, (1.0-ema_factor)*moving_grad_norm + ema_factor*batch_grad_norm)
+        with tf.control_dependencies([update_moving_grad_norm_op]):
+            disc_real /= moving_grad_norm
+    else:
+        disc_real /= grad_norm
+
+    disc_real *= LIPSCHITZ_TARGET
+
+disc_cost = 0
+
+if LOSS_TYPE == "xent":
+    xent_loss = tf.nn.softmax_cross_entropy_with_logits(
+        logits=disc_real,
+#        labels=real_labels_onehot
+        labels=real_labels
+    )
+    xent_loss_mean = tf.reduce_mean(xent_loss)
+    loss_list.append(('xent_loss', xent_loss_mean))
+    disc_cost += xent_loss_mean
+    main_loss = xent_loss
+elif LOSS_TYPE == "l2":
+#    l2_loss = tf.nn.l2_loss(disc_real - real_labels_onehot)
+    l2_loss = tf.nn.l2_loss(disc_real - real_labels)
+    loss_list.append(('l2_loss', l2_loss))
+    disc_cost += l2_loss
+    main_loss = l2_loss
+
+if DATAGRAD > 0:
+#    assert LOSS_TYPE == "xent"
+    datagrad_loss = tf.reduce_sum(tf.square(tf.gradients(main_loss, [real_data])[0]), axis=1)
+    datagrad_loss_mean = tf.reduce_mean(datagrad_loss)
+    loss_list.append(('datagrad_loss', datagrad_loss_mean))
+    disc_cost += DATAGRAD * datagrad_loss_mean
+
+if ENTROPY_PENALTY != 0:
+    ps = tf.nn.softmax(disc_real)
+    entropy_penalty = tf.reduce_sum(ps * tf.log(0.000001+ps))
+    loss_list.append(('entropy_penalty', entropy_penalty))
+    disc_cost += ENTROPY_PENALTY * entropy_penalty
+
+if LAMBDA > 0:
+    if GP_VERSION == STEEP_HALF_PARABOLA:
+        gradient_penalty = tf.reduce_mean(tf.maximum(1.0, slopes/LIPSCHITZ_TARGET)**2)
+    elif GP_VERSION == GENTLE_HALF_PARABOLA:
+        gradient_penalty = tf.reduce_mean(tf.maximum(0.0, slopes/LIPSCHITZ_TARGET - 1)**2)
+    elif GP_VERSION == L2:
+        gradient_penalty = tf.reduce_mean(slopes**2)
+    elif GP_VERSION == PARABOLA:
+        gradient_penalty = tf.reduce_mean((slopes/LIPSCHITZ_TARGET-1)**2)
+    else:
+        assert False, "Unrecognised GP_VERSION"
+
+    disc_cost += LAMBDA*gradient_penalty
+    loss_list.append(('gradient_penalty', gradient_penalty))
+
+if ACTIVATION_PENALTY > 0:
+    activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY))
+    disc_cost += activation_loss
+    loss_list.append(('activation_loss', activation_loss))
+
+# weight regularization
+with tf.variable_scope('weights_norm') as scope:
+    weight_loss = tf.reduce_sum(
+        input_tensor = tf.stack(
+            #[tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+            [tf.nn.l2_loss(var) for var in disc_filters]
+        ),
+        name='weight_loss'
+    )
+
+if WEIGHT_DECAY > 0:
+    disc_cost += WEIGHT_DECAY*weight_loss
+else:
+    weight_loss = tf.constant(0.0)
+loss_list.append(('weight_loss', weight_loss))
+
+global_step = global_step = tf.Variable(0, trainable=False)
+if LEARNING_RATE_DECAY == "piecewise":
+    values = [LEARNING_RATE * v for v in (1.0, 0.1, 0.01)]
+    boundaries = [ITERS//2, 3*ITERS//4]
+    learning_rate = tf.train.piecewise_constant(global_step, boundaries, values)
+elif LEARNING_RATE_DECAY == "exponential":
+    learning_rate = tf.train.exponential_decay(LEARNING_RATE, global_step, 1000, 0.9, staircase=False)
+else:
+    learning_rate = LEARNING_RATE
+
+
+if DISC_TYPE == "cifarResnet":
+    disc_optimizer = tf.train.MomentumOptimizer(
+        learning_rate=learning_rate,
+        momentum=0.9,
+        use_nesterov=True
+    )
+else:
+    disc_optimizer = tf.train.AdamOptimizer(
+        learning_rate=learning_rate
+    )
+
+disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
+disc_train_op = disc_optimizer.apply_gradients(disc_gvs, global_step=global_step)
+
+def evaluate(X_devel, y_devel):
+    dev_main_losses = []
+    dev_disc_costs = []
+    dev_real_disc_outputs = []
+    dev_real_labels = []
+
+    for _real_data_devel in data.regression_generator((X_devel, y_devel), BATCH_SIZE, infinity=False):
+        _dev_main_loss, _dev_disc_cost, _dev_real_disc_output = session.run(
+            [main_loss, disc_cost, disc_real],
+            feed_dict={
+                real_data: _real_data_devel[0], real_labels: _real_data_devel[1], dropout:1.0}
+        )
+        dev_main_losses.append(_dev_main_loss)
+        dev_disc_costs.append(_dev_disc_cost)
+        dev_real_disc_outputs.append(_dev_real_disc_output)
+        dev_real_labels.append(_real_data_devel[1])
+
+    dev_real_disc_outputs = np.concatenate(dev_real_disc_outputs)
+    dev_real_labels = np.concatenate(dev_real_labels)
+    dev_main_loss = np.mean(dev_main_losses)
+    dev_cost = np.mean(dev_disc_costs)
+    dev_acc = accuracy(dev_real_disc_outputs, dev_real_labels)
+
+    # log losses and extras
+    dev_summary_loss, dev_summary_extra = session.run([merged_loss_summary_op, merged_extra_summary_op],
+                                                      feed_dict={
+                                                          dropout: 1.0,
+                                                          real_data: _real_data_devel[0],
+                                                          real_labels: _real_data_devel[1]
+                                                      })
+    
+    return dev_cost, dev_acc, dev_summary_loss, dev_summary_extra, dev_real_disc_outputs, dev_main_loss
+
+def plot(xs, ys, name, scatter=True):
+    fig = plt.figure()
+    if xs.shape[1] == 2:
+        w = np.sqrt(len(xs))
+        # Make data.
+        Z = ys
+        X = np.arange(-1, 1, 2.0 / w)
+        Y = np.arange(-1, 1, 2.0 / w)
+        X, Y = np.meshgrid(X, Y)
+        X = np.reshape(X, Z.shape)
+        Y = np.reshape(Y, Z.shape)
+        
+        ax = fig.gca(projection='3d')
+        surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm,
+                               linewidth=0, antialiased=False)
+    elif xs.shape[1] == 1:
+        if scatter:
+            plt.scatter(xs, ys)
+        else:
+            plt.plot(xs, ys)
+
+    # # Customize the z axis.
+    # ax.set_zlim(-1, 1)
+    # ax.w_zaxis.set_major_locator(LinearLocator(6))
+
+    # # Add a color bar which maps values to colors.
+    # fig.colorbar(surf, shrink=0.5, aspect=5)
+
+    fig.savefig(name)
+    plt.close()
+
+plot(X_train, y_train, "toy_train.png", scatter=True)
+plot(X_devel, y_devel, "toy_devel.png")
+
+
+# Train loop
+config = tf.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = MEMORY_SHARE
+with tf.Session(config=config) as session:
+
+    # classifier is supposed to give maximal value to its true label
+    def accuracy(_disc_real, _label_real):
+        return np.sum(np.square(_disc_real - _label_real))
+        #return float(np.sum(np.argmax(_disc_real, axis=1) == _label_real)) / len(_label_real)
+
+    session.run(tf.global_variables_initializer())
+
+    LOG_DIR = "logs/%s" % SESSION_NAME
+    train_writer = tf.summary.FileWriter(LOG_DIR + '/train', graph=tf.get_default_graph())
+    test_writer = tf.summary.FileWriter(LOG_DIR + '/test', graph=tf.get_default_graph())
+
+    loss_summaries = []
+    extra_summaries = []
+
+    loss_summaries.append(tf.summary.scalar("disc_cost", disc_cost))
+    for (name, loss) in loss_list:
+        loss_summaries.append(tf.summary.scalar(name, loss))
+    merged_loss_summary_op = tf.summary.merge(loss_summaries)
+
+
+    if VERBOSITY >= 3:
+        for param_name, param in lib._params.iteritems():
+            print param_name, param
+            extra_summaries.append(tf.summary.histogram(param_name+"/weights", param))
+        for grad, var in disc_gvs:
+            if grad is not None:
+                extra_summaries.append(tf.summary.histogram(var.name + "/gradients", grad))
+
+    if VERBOSITY >= 2:
+        extra_summaries.append(tf.summary.histogram("slopes", slopes))
+        extra_summaries.append(tf.summary.scalar("grad_norm", grad_norm))
+        if GRADIENT_SHRINKING and (SHRINKING_NORM_EMA_FACTOR != 1.0):
+            extra_summaries.append(tf.summary.scalar("moving_grad_norm", moving_grad_norm))
+        extra_summaries.append(tf.summary.histogram("real_plus_noise_slopes", real_plus_noise_slopes))
+
+    merged_extra_summary_op = tf.summary.merge(extra_summaries)
+
+
+    print "NETWORK PARAMETER COUNT", np.sum([np.prod(v.shape) for v in tf.trainable_variables()])
+    for iteration in xrange(ITERS+1):
+        start_time = time.time()
+
+        _real_data = real_gen.next()
+        _real_data = (_real_data[0] + np.random.normal(size=_real_data[0].shape, scale=INPUT_NOISE),
+                        _real_data[1])
+
+        _main_loss, _disc_cost, _,  _disc_real, summary_loss = session.run(
+                [main_loss, disc_cost, disc_train_op, disc_real, merged_loss_summary_op],
+                feed_dict={
+                    real_data: _real_data[0], real_labels: _real_data[1], dropout:DROPOUT_KEEP_PROB}
+            )
+
+        lib.plot.plot('train disc cost', _disc_cost)
+        lib.plot.plot('train main loss', _main_loss)
+        lib.plot.plot('time', time.time() - start_time)
+
+        train_writer.add_summary(summary_loss, iteration)
+        # train_acc = accuracy(_disc_real, _real_data[1])
+        # train_summary_acc = tf.Summary(value=[
+        #     tf.Summary.Value(tag="train_accuracy", simple_value=train_acc),
+        # ])
+        # train_writer.add_summary(train_summary_acc, iteration)
+
+        # Calculate dev loss and generate samples every 100 iters
+        if iteration <= 5 or iteration % 500 == 0:
+#            print "TRAIN ACCURACY", train_acc
+            dev_cost, dev_acc, dev_summary_loss, dev_summary_extra, dev_disc_real_outputs, dev_main_loss = evaluate(X_devel, y_devel)
+            plot(X_devel, dev_disc_real_outputs, "toy_devel_dg-{}-{}.png".format(DATAGRAD, iteration))
+#            print "DEVEL ACCURACY", dev_acc
+            lib.plot.plot('dev disc cost', dev_cost)
+            lib.plot.plot('dev main loss', dev_main_loss)
+            # dev_summary_acc = tf.Summary(value=[
+            #     tf.Summary.Value(tag="devel_accuracy", simple_value=dev_acc), 
+            # ])
+            # test_writer.add_summary(dev_summary_acc, iteration)
+            test_writer.add_summary(dev_summary_loss, iteration)
+            test_writer.add_summary(dev_summary_extra, iteration)
+
+            # log extras for the trainset
+            summary_extra = session.run(
+                [merged_extra_summary_op],
+                feed_dict={
+                    real_data: _real_data[0], real_labels: _real_data[1], dropout:1.0}
+            )
+            train_writer.add_summary(summary_extra[0], iteration)
+            
+            sys.stdout.flush()
+            lib.plot.flush()
+
+        # if iteration % 2500 == 0:
+        #     saver = tf.train.Saver()
+        #     saver.save(session, os.path.join(LOG_DIR, "model.ckpt"), iteration)
+
+        lib.plot.tick()
+
+    # final test results
+    test_cost, test_acc, _, _, test_disc_real_outputs, test_main_loss = evaluate(X_test, y_test)
+    #    print "TEST ACCURACY", test_acc
+    lib.plot.plot('test disc cost', test_cost)
+    # test_summary_acc = tf.Summary(value=[
+    #     tf.Summary.Value(tag="test_accuracy", simple_value=test_acc), 
+    # ])
+    # test_writer.add_summary(test_summary_acc, iteration)
+        
+
+
+
+program_end_time = time.time()
+print "Total time: " + str(program_end_time - program_start_time)
+
+
+
+
+
+
+

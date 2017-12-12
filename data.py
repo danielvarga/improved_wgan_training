@@ -85,6 +85,11 @@ def load_raw_data(dataset, seed=None):
 #     return (reals_train, fakes_train), (reals_test, fakes_test)
 
 def load_set(dataset, TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, seed=None):
+    if dataset == "toy2":
+        return load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 2, seed=seed)
+    elif dataset == "toy1":
+        return load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 1, seed=seed)
+
     (X_train, y_train), (X_devel, y_devel), (X_test, y_test) = load_raw_data(dataset, seed=seed)
     assert len(X_train) >= TRAIN_DATASET_SIZE
     assert len(X_test) >= TEST_DATASET_SIZE
@@ -123,6 +128,19 @@ def generator(data, batch_size, infinity=True):
         i = 0
         while (i+1) * batch_size <= len(d):
             yield d[i * batch_size : (i+1) * batch_size]
+            i += 1
+        if not infinity:
+            break
+
+def regression_generator((xs, ys), batch_size, infinity=True):
+    indices = np.array(range(len(xs)))
+    while True:
+        np.random.shuffle(indices)
+        i = 0
+        while (i+1) * batch_size <= len(indices):
+            x = xs[i * batch_size : (i+1) * batch_size]
+            y = ys[i * batch_size : (i+1) * batch_size]
+            yield x, y
             i += 1
         if not infinity:
             break
@@ -215,3 +233,45 @@ def load_fashion_mnist():
                                offset=16).reshape(len(y_test), 28, 28)
 
     return (x_train, y_train), (x_test, y_test)
+
+
+def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, seed=None):
+    noise_sigma=0.03
+    if seed is not None:
+        state = np.random.get_state()
+        np.random.seed(seed)
+
+    X_train = np.random.uniform(low=-1, size=(TRAIN_DATASET_SIZE, dim))
+
+    if dim == 2:
+        w = int(np.sqrt(DEVEL_DATASET_SIZE))
+        X_devel = np.zeros(shape=(w * w, 2))
+        for x1 in range(w):
+            for x2 in range(w):
+                X_devel[w * x1 + x2] = float(x1) / w, float(x2) / w
+        X_devel = 2 * X_devel - 1
+    
+        # y = x1^2 + x2^2
+        def f(xs):
+            xs_squared = np.square(xs)
+            ys = xs_squared[:,0] + xs_squared[:,1]
+            return np.reshape(ys, [len(ys), 1])
+    elif dim == 1:
+        X_devel = np.arange(-1, 1, 2.0 / DEVEL_DATASET_SIZE)
+        X_devel = np.reshape(X_devel, [DEVEL_DATASET_SIZE, 1])
+        def f(xs):
+            ys = np.square(xs)
+            return np.reshape(ys, [len(ys), 1])
+    
+    y_train = f(X_train)
+    y_devel = f(X_devel)
+    X_test = X_devel
+    y_test = y_devel
+
+    y_train += noise_sigma * np.random.normal(size=y_train.shape)
+
+
+    return (X_train, y_train), (X_devel, y_devel), (X_test, y_test)
+
+                           
+
