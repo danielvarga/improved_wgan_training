@@ -145,6 +145,7 @@ def regression_generator((xs, ys), batch_size, infinity=True):
         if not infinity:
             break
 
+
 def classifier_generator((xs, ys), batch_size, infinity=True, augment=False):
     if augment:
         datagen = ImageDataGenerator(
@@ -236,7 +237,7 @@ def load_fashion_mnist():
 
 
 def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, seed=None):
-    noise_sigma=0.03
+    noise_sigma=0 #0.1
     if seed is not None:
         state = np.random.get_state()
         np.random.seed(seed)
@@ -244,17 +245,22 @@ def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, see
     X_train = np.random.uniform(low=-1, size=(TRAIN_DATASET_SIZE, dim))
 
     if dim == 2:
+        # dev set is a (-1,1) grid
         w = int(np.sqrt(DEVEL_DATASET_SIZE))
         X_devel = np.zeros(shape=(w * w, 2))
         for x1 in range(w):
             for x2 in range(w):
                 X_devel[w * x1 + x2] = float(x1) / w, float(x2) / w
         X_devel = 2 * X_devel - 1
+
+        # dev set is a small grid around one training point 
+        # TODO to be removed
+#        X_devel = X_train[5] + 0.001 * X_devel
     
         # y = x1^2 + x2^2
         def f(xs):
             xs_squared = np.square(xs)
-            ys = xs_squared[:,0] + xs_squared[:,1]
+            ys = np.sum(np.square(xs), axis=1)
             return np.reshape(ys, [len(ys), 1])
     elif dim == 1:
         X_devel = np.arange(-1, 1, 2.0 / DEVEL_DATASET_SIZE)
