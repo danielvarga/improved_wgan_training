@@ -255,7 +255,7 @@ def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, see
 
         # dev set is a small grid around one training point 
         # TODO to be removed
-#        X_devel = X_train[5] + 0.001 * X_devel
+#        X_devel = X_train[5] + 1 * X_devel
     
         # y = x1^2 + x2^2
         def f(xs):

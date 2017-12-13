@@ -5,7 +5,7 @@ sys.path.append(os.getcwd())
 import time
 
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.ticker import LinearLocator
@@ -51,7 +51,7 @@ LEARNING_RATE_DECAY = "piecewise"
 LEARNING_RATE = 0.01
 AUGMENTATION = False
 
-TRAIN_DATASET_SIZE = 100
+TRAIN_DATASET_SIZE = 900
 DEVEL_DATASET_SIZE = 900
 TEST_DATASET_SIZE = 400
 # BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
@@ -76,7 +76,7 @@ ENTROPY_PENALTY = 0.0
 WIDENESS = 5 # THIS IS USED FOR THE DEPTH OF THE NET!!!
 
 RANDOM_SEED = 10 # None
-VERBOSITY=2 # VERBOSITY>=2: logs slopes, VERBOSITY>=3: logs weight and gradient histograms
+VERBOSITY=3 # VERBOSITY>=2: logs slopes, VERBOSITY>=3: logs weight and gradient histograms
 program_start_time = time.time()
 
 def heuristic_cast(s):
@@ -390,25 +390,48 @@ def evaluate(X_devel, y_devel):
     
     return dev_cost, dev_acc, dev_summary_loss, dev_summary_extra, dev_real_disc_outputs, dev_main_loss
 
-def plot(xs, ys, name, scatter=False):
+def plot(train_xs, train_ys, test_xs, test_ys, name, scatter=False):
     fig = plt.figure()
-    if xs.shape[1] == 2:
-        w = int(np.sqrt(xs.shape[0]))
-        Z = np.reshape(ys, (w,w))
-        X = np.reshape(xs[:,0], (w, w))
-        Y = np.reshape(xs[:,1], (w, w))
 
-        ax = fig.gca(projection='3d')
-        if scatter:
-            ax.scatter(X, Y, Z)
-        else:
-            surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm,
-                                   linewidth=0, antialiased=False)
-    elif xs.shape[1] == 1:
-        if scatter:
-            plt.scatter(xs, ys)
-        else:
-            plt.plot(xs, ys)
+    def aux(xs, ys):
+        if xs.shape[1] == 2:
+            w = int(np.sqrt(xs.shape[0]))
+            xs = xs[:w*w]
+            ys = ys[:w*w]
+            Z = np.reshape(ys, (w,w))
+            X = np.reshape(xs[:,0], (w, w))
+            Y = np.reshape(xs[:,1], (w, w))
+            ax = fig.gca(projection='3d')
+            if scatter:
+                ax.scatter(X, Y, Z)
+            else:
+                surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm, linewidth=0, antialiased=False)
+        elif xs.shape[1] == 1:
+            if scatter:
+                plt.scatter(xs, ys)
+            else:
+                plt.plot(xs, ys)
+
+    aux(train_xs, train_ys)
+    aux(test_xs, test_ys)
+
+    # if xs.shape[1] == 2:
+    #     w = int(np.sqrt(xs.shape[0]))
+    #     Z = np.reshape(ys, (w,w))
+    #     X = np.reshape(xs[:,0], (w, w))
+    #     Y = np.reshape(xs[:,1], (w, w))
+
+    #     ax = fig.gca(projection='3d')
+    #     if scatter:
+    #         ax.scatter(X, Y, Z)
+    #     else:
+    #         surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm,
+    #                                linewidth=0, antialiased=False)
+    # elif xs.shape[1] == 1:
+    #     if scatter:
+    #         plt.scatter(xs, ys)
+    #     else:
+    #         plt.plot(xs, ys)
 
     # # Customize the z axis.
     # ax.set_zlim(-1, 1)
@@ -418,10 +441,12 @@ def plot(xs, ys, name, scatter=False):
     # fig.colorbar(surf, shrink=0.5, aspect=5)
 
     fig.savefig(name)
+    if "5000" in name:
+        plt.show()
     plt.close()
 
-plot(X_train, y_train, "toy_{}_train.png".format(DATASET), scatter=True)
-plot(X_devel, y_devel, "toy_{}_devel.png".format(DATASET))
+plot(X_train, y_train, X_devel, y_devel, "toy_{}_orig.png".format(DATASET), scatter=True)
+# plot(X_devel, y_devel, "toy_{}_devel.png".format(DATASET))
 
 # Train loop
 config = tf.ConfigProto()
@@ -495,7 +520,7 @@ with tf.Session(config=config) as session:
         if iteration <= 5 or iteration % 500 == 0:
 #            print "TRAIN ACCURACY", train_acc
             dev_cost, dev_acc, dev_summary_loss, dev_summary_extra, dev_disc_real_outputs, dev_main_loss = evaluate(X_devel, y_devel)
-#            plot(X_devel, dev_disc_real_outputs, "toy_{}_dg-{}_wd-{}_spect-{}_{}.png".format(DATASET, DATAGRAD, WEIGHT_DECAY, LAMBDA, iteration))
+            plot(_real_data[0], _disc_real, X_devel, dev_disc_real_outputs, "toy_{}_dg-{}_wd-{}_spect-{}_{}.png".format(DATASET, DATAGRAD, WEIGHT_DECAY, LAMBDA, iteration), scatter=True)
 #            print "DEVEL ACCURACY", dev_acc
             lib.plot.plot('dev disc cost', dev_cost)
             lib.plot.plot('dev main loss', dev_main_loss)
@@ -525,7 +550,7 @@ with tf.Session(config=config) as session:
 
     # final test results
     test_cost, test_acc, _, _, test_disc_real_outputs, test_main_loss = evaluate(X_test, y_test)
-    plot(X_devel, test_disc_real_outputs, "toy_{}_dg-{}_wd-{}_spect-{}_{}.png".format(DATASET, DATAGRAD, WEIGHT_DECAY, LAMBDA, ITERS))
+#    plot(X_devel, test_disc_real_outputs, "toy_{}_dg-{}_wd-{}_spect-{}_{}.png".format(DATASET, DATAGRAD, WEIGHT_DECAY, LAMBDA, ITERS))
     #    print "TEST ACCURACY", test_acc
     lib.plot.plot('test disc cost', test_cost)
     # test_summary_acc = tf.Summary(value=[
