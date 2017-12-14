@@ -138,6 +138,8 @@ SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-comb
     WIDENESS,
     time.strftime('%Y%m%d-%H%M%S'))
 
+prefix = "toy/{}_dg-{}_wd-{}_spect-{}".format(DATASET, DATAGRAD, WEIGHT_DECAY, LAMBDA)
+
 (X_train, y_train), (X_devel, y_devel), (X_test, y_test) = data.load_set(DATASET, TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, seed=RANDOM_SEED)
 
 
@@ -393,7 +395,7 @@ def evaluate(X_devel, y_devel):
 def plot(train_xs, train_ys, test_xs, test_ys, name, scatter=False):
     fig = plt.figure()
 
-    def aux(xs, ys):
+    def aux(xs, ys, scatter):
         if xs.shape[1] == 2:
             w = int(np.sqrt(xs.shape[0]))
             xs = xs[:w*w]
@@ -412,8 +414,8 @@ def plot(train_xs, train_ys, test_xs, test_ys, name, scatter=False):
             else:
                 plt.plot(xs, ys)
 
-    aux(test_xs, test_ys)
-    aux(train_xs, train_ys)
+    aux(test_xs, test_ys, scatter)
+    aux(train_xs, train_ys, True)
 
     # # Add a color bar which maps values to colors.
     # fig.colorbar(surf, shrink=0.5, aspect=5)
@@ -423,7 +425,7 @@ def plot(train_xs, train_ys, test_xs, test_ys, name, scatter=False):
         plt.show()
     plt.close()
 
-plot(X_train, y_train, X_devel, y_devel, "toy_{}_orig.png".format(DATASET), scatter=True)
+plot(X_train, y_train, X_devel, y_devel, "{}_orig.png".format(prefix), scatter=False)
 
 #print X_train[5]
 #print y_train[5]
@@ -502,7 +504,7 @@ with tf.Session(config=config) as session:
         if iteration <= 5 or iteration % 500 == 0:
 #            print "TRAIN ACCURACY", train_acc
             dev_cost, dev_acc, dev_summary_loss, dev_summary_extra, dev_disc_real_outputs, dev_main_loss = evaluate(X_devel, y_devel)
-            plot(_real_data[0], _disc_real, X_devel, dev_disc_real_outputs, "toy_{}_dg-{}_wd-{}_spect-{}_{}.png".format(DATASET, DATAGRAD, WEIGHT_DECAY, LAMBDA, iteration), scatter=True)
+            plot(_real_data[0], _disc_real, X_devel, dev_disc_real_outputs, "{}_{}.png".format(prefix, iteration), scatter=True)
 #            print "DEVEL ACCURACY", dev_acc
             lib.plot.plot('dev disc cost', dev_cost)
             lib.plot.plot('dev main loss', dev_main_loss)
@@ -532,7 +534,8 @@ with tf.Session(config=config) as session:
 
     # final test results
     test_cost, test_acc, _, _, test_disc_real_outputs, test_main_loss = evaluate(X_test, y_test)
-#    plot(X_devel, test_disc_real_outputs, "toy_{}_dg-{}_wd-{}_spect-{}_{}.png".format(DATASET, DATAGRAD, WEIGHT_DECAY, LAMBDA, ITERS))
+    plot(X_train, y_train, X_devel, test_disc_real_outputs, "{}_final.png".format(prefix), scatter=False)
+
     #    print "TEST ACCURACY", test_acc
     lib.plot.plot('test disc cost', test_cost)
     # test_summary_acc = tf.Summary(value=[
@@ -540,16 +543,10 @@ with tf.Session(config=config) as session:
     # ])
     # test_writer.add_summary(test_summary_acc, iteration)
 
-
+    np.savez(prefix + ".npz", x=X_devel, y=test_disc_real_outputs)
+    np.savez(prefix + "_train.npz", x=X_train, y=y_train)
 
 
 
 program_end_time = time.time()
 print "Total time: " + str(program_end_time - program_start_time)
-
-
-
-
-
-
-
