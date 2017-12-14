@@ -5,7 +5,7 @@ sys.path.append(os.getcwd())
 import time
 
 import matplotlib
-# matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.ticker import LinearLocator
@@ -51,7 +51,7 @@ LEARNING_RATE_DECAY = "piecewise"
 LEARNING_RATE = 0.01
 AUGMENTATION = False
 
-TRAIN_DATASET_SIZE = 900
+TRAIN_DATASET_SIZE = 100
 DEVEL_DATASET_SIZE = 900
 TEST_DATASET_SIZE = 400
 # BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
@@ -412,30 +412,8 @@ def plot(train_xs, train_ys, test_xs, test_ys, name, scatter=False):
             else:
                 plt.plot(xs, ys)
 
-    aux(train_xs, train_ys)
     aux(test_xs, test_ys)
-
-    # if xs.shape[1] == 2:
-    #     w = int(np.sqrt(xs.shape[0]))
-    #     Z = np.reshape(ys, (w,w))
-    #     X = np.reshape(xs[:,0], (w, w))
-    #     Y = np.reshape(xs[:,1], (w, w))
-
-    #     ax = fig.gca(projection='3d')
-    #     if scatter:
-    #         ax.scatter(X, Y, Z)
-    #     else:
-    #         surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm,
-    #                                linewidth=0, antialiased=False)
-    # elif xs.shape[1] == 1:
-    #     if scatter:
-    #         plt.scatter(xs, ys)
-    #     else:
-    #         plt.plot(xs, ys)
-
-    # # Customize the z axis.
-    # ax.set_zlim(-1, 1)
-    # ax.w_zaxis.set_major_locator(LinearLocator(6))
+    aux(train_xs, train_ys)
 
     # # Add a color bar which maps values to colors.
     # fig.colorbar(surf, shrink=0.5, aspect=5)
@@ -446,7 +424,11 @@ def plot(train_xs, train_ys, test_xs, test_ys, name, scatter=False):
     plt.close()
 
 plot(X_train, y_train, X_devel, y_devel, "toy_{}_orig.png".format(DATASET), scatter=True)
-# plot(X_devel, y_devel, "toy_{}_devel.png".format(DATASET))
+
+#print X_train[5]
+#print y_train[5]
+#print np.sum(np.square(X_train[5]))
+#xxx
 
 # Train loop
 config = tf.ConfigProto()
@@ -557,7 +539,8 @@ with tf.Session(config=config) as session:
     #     tf.Summary.Value(tag="test_accuracy", simple_value=test_acc), 
     # ])
     # test_writer.add_summary(test_summary_acc, iteration)
-        
+
+
 
 
 

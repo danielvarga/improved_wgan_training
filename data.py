@@ -237,7 +237,7 @@ def load_fashion_mnist():
 
 
 def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, seed=None):
-    noise_sigma=0 #0.1
+    noise_sigma=0.03
     if seed is not None:
         state = np.random.get_state()
         np.random.seed(seed)
@@ -255,7 +255,7 @@ def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, see
 
         # dev set is a small grid around one training point 
         # TODO to be removed
-#        X_devel = X_train[5] + 1 * X_devel
+#        X_devel = X_train[5] + 0.003 * X_devel
     
         # y = x1^2 + x2^2
         def f(xs):
