@@ -50,14 +50,21 @@ records = sorted(records, key=lambda k: k[sortkey])
 fig = plt.figure()
 plt.scatter(X_train, y_train, label="train")
 
+min = -1000
+max = 1000
 for record in records:
+    min = np.min(record['x'].min(), min)
+    max = np.max(record['x'].max(), min)
     plt.plot(record['x'], record['y'], label=record[sortkey])
+
+plt.xlim([min, max])
 
 plt.legend(bbox_to_anchor=(1.12, 1.15))
 plt.xlabel('x')
 plt.ylabel('f(x) = sin(5x)')
-plt.title('Regression with various SpectReg weights')
+plt.title('The effect of SpectReg on function approximation')
 
 
-fig.savefig("ttt.png")
+fig.savefig("synthetic_sin_spectreg.pdf")
+fig.savefig("synthetic_sin_spectreg.png")
 plt.close
