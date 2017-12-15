@@ -11,11 +11,11 @@ from matplotlib import cm
 import numpy as np
 
 rootdir = "toy" 
+keys = ["dg", "wd", "spect"]
+sortkey = "spect"
 
 found = False
-xs = []
-ys = []
-dgs = []
+records = []
 for folder, subs, files in os.walk(rootdir):
     for filename in files:
         if not filename.endswith(".npz"):
@@ -27,37 +27,37 @@ for folder, subs, files in os.walk(rootdir):
                 y_train = f['y']
                 found=True
         else:
-            match = re.search("dg-(?P<val>([^\_]+|\_[^\_]+))\_", filename)
-            if match:
-                dg = float(match.group('val'))
-            else:
-                print "Could not parse datagrad weight from file {}".format(filename)
-                continue
+            record = {}
+            for key in keys:
+                match = re.search(key + "-(?P<val>([^\_]+))(\_|\.npz)", filename)
+                if match:
+                    value = float(match.group('val'))
+                    record[key] = value
+                else:
+                    print "Could not parse {} weight from file {}".format(key, filename)
+                    continue
             f = np.load(folder + "/" + filename)
-            X_devel = f['x']
-            y_devel = f['y']
-            xs.append(X_devel)
-            ys.append(y_devel)
-            dgs.append(dg)
+            record['x'] = f['x']
+            record['y'] =  f['y']
 
-xs = np.array(xs)
-ys = np.array(ys)
-dgs = np.array(dgs)
-p = dgs.argsort()
-xs = xs[p]
-ys = ys[p]
-dgs = dgs[p]
+            # filtering TODO
+            if record['dg'] > 0:
+                continue
+            records.append(record)
+
+records = sorted(records, key=lambda k: k[sortkey]) 
 
 fig = plt.figure()
 plt.scatter(X_train, y_train, label="train")
 
-d_min = np.where(dgs==0)[0][0]
-d_max = np.where(dgs==70)[0][0]
-d_step = 4
-for i in range(d_min, d_max, d_step):
-    plt.plot(xs[i], ys[i], label=int(dgs[i]))
+for record in records:
+    plt.plot(record['x'], record['y'], label=record[sortkey])
 
-plt.legend(bbox_to_anchor=(0.95, 1.15))
+plt.legend(bbox_to_anchor=(1.12, 1.15))
+plt.xlabel('x')
+plt.ylabel('f(x) = sin(5x)')
+plt.title('Regression with various SpectReg weights')
+
 
 fig.savefig("ttt.png")
 plt.close

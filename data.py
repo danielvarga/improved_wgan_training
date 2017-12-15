@@ -237,7 +237,7 @@ def load_fashion_mnist():
 
 
 def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, seed=None):
-    noise_sigma=0.03
+    noise_sigma=0.1
     if seed is not None:
         state = np.random.get_state()
         np.random.seed(seed)
@@ -266,7 +266,8 @@ def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, see
         X_devel = np.arange(-1, 1, 2.0 / DEVEL_DATASET_SIZE)
         X_devel = np.reshape(X_devel, [DEVEL_DATASET_SIZE, 1])
         def f(xs):
-            ys = np.square(xs)
+#            ys = np.square(xs)
+            ys = np.sin(5*xs)
             return np.reshape(ys, [len(ys), 1])
     
     y_train = f(X_train)
