@@ -182,6 +182,12 @@ def types_onehot_lenettuned(record):
     else:
         return "lambda %06.4f" % record['lambda']
 
+# for visualizing grid_mnist_1_new.sh results for lenet
+# python stat.py logs test_accuracy test 10000 -type_grouping mnist_1_new -x_key reg
+def types_mnist_1_new(record):
+    return record['reg'] + "_dg-" + str(record['dg']) + "_spect-" + str(record['lambda'])
+
+    
 # for visualizing grid_mnist_1.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_1 accuracy test 10000 -type_grouping mnist_1 -x_key reg
 def types_mnist_1(record):
@@ -203,7 +209,7 @@ def types_mnist_1(record):
     return None
 
 # same as types_mnist_1, but gives mean and std for each reg as well
-# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_1_x accuracy test 10000 -type_grouping mnist_1
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_1_x accuracy test 10000 -type_grouping mnist_1_x
 def types_mnist_1_x(record):
     reg = record['reg']
     if record['bn'] == "y":
