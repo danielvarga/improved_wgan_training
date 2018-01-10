@@ -40,7 +40,7 @@ LIPSCHITZ_TARGET = 1.0
 SHRINKING_NORM_EMA_FACTOR = 1.0
 
 DIM = 64 # Width of dense layers
-BATCH_SIZE = 50 # Batch size
+BATCH_SIZE = 10 # Batch size
 ITERS = 10000 # How many iterations to train for
 DO_BATCHNORM = False
 ACTIVATION_PENALTY = 0.0
@@ -51,12 +51,12 @@ LEARNING_RATE_DECAY = "piecewise"
 LEARNING_RATE = 0.01
 AUGMENTATION = False
 
-TRAIN_DATASET_SIZE = 100
+TRAIN_DATASET_SIZE = 20
 DEVEL_DATASET_SIZE = 900
 TEST_DATASET_SIZE = 400
 # BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 OUTPUT_COUNT = 10
-DATASET="toy1" # cifar10 / mnist
+DATASET="toy1_shifted" # cifar10 / mnist
 DISC_TYPE = "toy" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet"
 
 # Note that L2 ignores LIPSCHITZ_TARGET, while in all the PARABOLA versions
@@ -73,10 +73,10 @@ LOSS_TYPE = "l2"
 INPUT_NOISE = 0.0
 
 ENTROPY_PENALTY = 0.0
-WIDENESS = 5 # THIS IS USED FOR THE DEPTH OF THE NET!!!
+WIDENESS = 2 # THIS IS USED FOR THE DEPTH OF THE NET!!!
 
 RANDOM_SEED = 10 # None
-VERBOSITY=3 # VERBOSITY>=2: logs slopes, VERBOSITY>=3: logs weight and gradient histograms
+VERBOSITY=1 # VERBOSITY>=2: logs slopes, VERBOSITY>=3: logs weight and gradient histograms
 program_start_time = time.time()
 
 def heuristic_cast(s):
@@ -138,7 +138,8 @@ SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-comb
     WIDENESS,
     time.strftime('%Y%m%d-%H%M%S'))
 
-prefix = "toy/{}_dg-{}_wd-{}_spect-{}".format(DATASET, DATAGRAD, WEIGHT_DECAY, LAMBDA)
+#prefix = "toy/{}_dg-{}_wd-{}_spect-{}".format(DATASET, DATAGRAD, WEIGHT_DECAY, LAMBDA)
+prefix = "tmp/tmp"
 
 (X_train, y_train), (X_devel, y_devel), (X_test, y_test) = data.load_set(DATASET, TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, seed=RANDOM_SEED)
 
@@ -220,7 +221,7 @@ def get_slopes(input):
         else:
             assert False, "Not supported COMBINE_OUTPUTS_MODE: " + COMBINE_OUTPUTS_MODE
 
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+        slopes = tf.sqrt(1e-16 + tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     else:
         if COMBINE_OUTPUTS_MODE == "softmax": # this is the true JacReg version
             jacobians = util.jacobian_by_batch(tf.nn.softmax(output), input) 
@@ -309,7 +310,6 @@ if LAMBDA > 0:
         gradient_penalty = tf.reduce_mean((slopes/LIPSCHITZ_TARGET-1)**2)
     else:
         assert False, "Unrecognised GP_VERSION"
-
     disc_cost += LAMBDA*gradient_penalty
     loss_list.append(('gradient_penalty', gradient_penalty))
 
@@ -351,11 +351,17 @@ if DISC_TYPE == "cifarResnet":
         momentum=0.9,
         use_nesterov=True
     )
+elif DISC_TYPE == "toy":
+    disc_optimizer = tf.train.MomentumOptimizer(
+        learning_rate=learning_rate,
+        momentum=0.9,
+        use_nesterov=True
+    )
 else:
     disc_optimizer = tf.train.AdamOptimizer(
         learning_rate=learning_rate
     )
-
+    
 disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
 disc_train_op = disc_optimizer.apply_gradients(disc_gvs, global_step=global_step)
 
@@ -452,6 +458,7 @@ with tf.Session(config=config) as session:
     extra_summaries = []
 
     loss_summaries.append(tf.summary.scalar("disc_cost", disc_cost))
+    extra_summaries.append(tf.summary.scalar("disc_cost_extra", disc_cost))
     for (name, loss) in loss_list:
         loss_summaries.append(tf.summary.scalar(name, loss))
     merged_loss_summary_op = tf.summary.merge(loss_summaries)
@@ -483,15 +490,16 @@ with tf.Session(config=config) as session:
         _real_data = (_real_data[0] + np.random.normal(size=_real_data[0].shape, scale=INPUT_NOISE),
                         _real_data[1])
 
-        _main_loss, _disc_cost, _,  _disc_real, summary_loss = session.run(
-                [main_loss, disc_cost, disc_train_op, disc_real, merged_loss_summary_op],
+        _slopes, _main_loss, _disc_cost, _,  _disc_real, summary_loss = session.run(
+                [slopes, main_loss, disc_cost, disc_train_op, disc_real, merged_loss_summary_op],
                 feed_dict={
                     real_data: _real_data[0], real_labels: _real_data[1], dropout:DROPOUT_KEEP_PROB}
             )
-
+        _gradient_penalty = np.mean(_slopes**2)
         lib.plot.plot('train disc cost', _disc_cost)
         lib.plot.plot('train main loss', _main_loss)
-        lib.plot.plot('time', time.time() - start_time)
+        lib.plot.plot('train gp', _gradient_penalty)
+#        lib.plot.plot('time', time.time() - start_time)
 
         train_writer.add_summary(summary_loss, iteration)
         # train_acc = accuracy(_disc_real, _real_data[1])
@@ -504,7 +512,7 @@ with tf.Session(config=config) as session:
         if iteration <= 5 or iteration % 500 == 0:
 #            print "TRAIN ACCURACY", train_acc
             dev_cost, dev_acc, dev_summary_loss, dev_summary_extra, dev_disc_real_outputs, dev_main_loss = evaluate(X_devel, y_devel)
-            plot(_real_data[0], _disc_real, X_devel, dev_disc_real_outputs, "{}_{}.png".format(prefix, iteration), scatter=True)
+#            plot(_real_data[0], _disc_real, X_devel, dev_disc_real_outputs, "{}_{}.png".format(prefix, iteration), scatter=True)
 #            print "DEVEL ACCURACY", dev_acc
             lib.plot.plot('dev disc cost', dev_cost)
             lib.plot.plot('dev main loss', dev_main_loss)

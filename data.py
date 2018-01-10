@@ -86,9 +86,11 @@ def load_raw_data(dataset, seed=None):
 
 def load_set(dataset, TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, seed=None):
     if dataset == "toy2":
-        return load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 2, seed=seed)
+        return load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 2, seed=seed, noise_sigma=0.1)
     elif dataset == "toy1":
-        return load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 1, seed=seed)
+        return load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 1, seed=seed, noise_sigma=0)
+    elif dataset == "toy1_shifted":
+        return load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 1, seed=seed, shift=0.05, noise_sigma=0)
 
     (X_train, y_train), (X_devel, y_devel), (X_test, y_test) = load_raw_data(dataset, seed=seed)
     assert len(X_train) >= TRAIN_DATASET_SIZE
@@ -236,8 +238,7 @@ def load_fashion_mnist():
     return (x_train, y_train), (x_test, y_test)
 
 
-def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, seed=None):
-    noise_sigma=0.1
+def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, noise_sigma=0.1, seed=None, shift=0):
     if seed is not None:
         state = np.random.get_state()
         np.random.seed(seed)
@@ -275,8 +276,17 @@ def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, see
     X_test = X_devel
     y_test = y_devel
 
-    y_train += noise_sigma * np.random.normal(size=y_train.shape)
 
+    if noise_sigma > 0:
+        y_train += noise_sigma * np.random.normal(size=y_train.shape)
+    if shift > 0: # create a step function by reproducing the same y values for x values shifted by shift
+        X_train = np.arange(-1, 1, 2.0 / (TRAIN_DATASET_SIZE // 2))
+        X_train = np.reshape(X_train, [-1, 1])
+        y_train = f(X_train)
+
+        X_train_shifted = X_train + shift
+        X_train = np.concatenate([X_train, X_train_shifted])
+        y_train = np.concatenate([y_train, y_train])
 
     return (X_train, y_train), (X_devel, y_devel), (X_test, y_test)
 

@@ -50,11 +50,11 @@ records = sorted(records, key=lambda k: k[sortkey])
 fig = plt.figure()
 plt.scatter(X_train, y_train, label="train")
 
-min = -1000
-max = 1000
+min = 1000
+max = -1000
 for record in records:
-    min = np.min(record['x'].min(), min)
-    max = np.max(record['x'].max(), min)
+    min = np.min((record['x'].min(), min))
+    max = np.max((record['x'].max(), min))
     plt.plot(record['x'], record['y'], label=record[sortkey])
 
 plt.xlim([min, max])
