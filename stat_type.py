@@ -23,6 +23,18 @@ def basic_types(record):
     type += "-wd_" + str(record['wd'])
     return type
 
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_full accuracy test 50000 -type_grouping mnist_full
+def types_mnist_full(record):
+    if record['dg'] > 0:
+        if record['ent'] > 0:
+            return "ent+dg"
+        else:
+            return "dg"
+    elif record['ent'] > 0:
+        return "ent"
+    else:
+        return "unreg"
+
 # for visualizing grid_cifar10_ent_dg_spect.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar10_ent_dg_spect test_accuracy test 50000 -type_grouping cifar10_ent_dg_spect
 def types_cifar10_ent_dg_spect(record):
@@ -45,9 +57,9 @@ def types_mnist_4(record):
     elif record['dg'] > 0:
         return "DataGrad"
     elif record['ent'] > 0:
-        return "EntReg"
+        return "Confidence Penalty"
     else:
-        return "Unreg"
+        return "Baseline (weight decay)"
 
 # for visualizing grid_mnist_6.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_6 test_accuracy test 10000 -type_grouping mnist_6
