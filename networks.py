@@ -128,11 +128,11 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         input_dim = np.prod(INPUT_SHAPE)
         output = tf.reshape(inputs, [-1, input_dim])
 
-        output = lib.ops.linear.Linear('Discriminator.1', input_dim, 1024, output)
+        output = lib.ops.linear.Linear('Discriminator.1', input_dim, DIM, output)
         output = LeakyReLU(output, alpha=0.0)
-        output = lib.ops.linear.Linear('Discriminator.2', 1024, 1024, output)
+        output = lib.ops.linear.Linear('Discriminator.2', DIM, DIM, output)
         output = LeakyReLU(output, alpha=0.0)
-        output = lib.ops.linear.Linear('Discriminator.output', 1024, OUTPUT_COUNT, output)
+        output = lib.ops.linear.Linear('Discriminator.output', DIM, OUTPUT_COUNT, output)
         return output
 
     def CifarResnet(inputs):
