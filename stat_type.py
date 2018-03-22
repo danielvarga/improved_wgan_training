@@ -23,6 +23,18 @@ def basic_types(record):
     type += "-wd_" + str(record['wd'])
     return type
 
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_full accuracy test 50000 -type_grouping mnist_full
+def types_mnist_full(record):
+    if record['dg'] > 0:
+        if record['ent'] > 0:
+            return "ent+dg"
+        else:
+            return "dg"
+    elif record['ent'] > 0:
+        return "ent"
+    else:
+        return "unreg"
+
 # for visualizing grid_cifar10_ent_dg_spect.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar10_ent_dg_spect test_accuracy test 50000 -type_grouping cifar10_ent_dg_spect
 def types_cifar10_ent_dg_spect(record):
@@ -45,9 +57,9 @@ def types_mnist_4(record):
     elif record['dg'] > 0:
         return "DataGrad"
     elif record['ent'] > 0:
-        return "EntReg"
+        return "Confidence Penalty"
     else:
-        return "Unreg"
+        return "Baseline (weight decay)"
 
 # for visualizing grid_mnist_6.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_6 test_accuracy test 10000 -type_grouping mnist_6
@@ -182,46 +194,10 @@ def types_onehot_lenettuned(record):
     else:
         return "lambda %06.4f" % record['lambda']
 
-# for visualizing grid_mnist_1.sh results for lenet
-# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_1 accuracy test 10000 -type_grouping mnist_1 -x_key reg
+# for visualizing grid_mnist_1_new.sh results for lenet
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_1 test_accuracy test 10000 -type_grouping mnist_1 -x_key reg
 def types_mnist_1(record):
-    if record['bn'] == "y":
-        if record['dg'] == 0.001:
-            return "DataGrad"
-        elif record['lambda'] == 0.001:
-            return "SpectReg"
-        elif record['lambda'] == 0 and record['dg'] == 0:
-            return "NoGP"
-        else:
-            return None
-    if record['dg'] == 50:
-        return "DataGrad"
-    elif record['lambda'] == 0.01:
-        return "SpectReg"
-    elif record['lambda'] == 0 and record['dg'] == 0:
-        return "NoGP"
-    return None
-
-# same as types_mnist_1, but gives mean and std for each reg as well
-# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_1_x accuracy test 10000 -type_grouping mnist_1
-def types_mnist_1_x(record):
-    reg = record['reg']
-    if record['bn'] == "y":
-        if record['dg'] == 0.001:
-            return reg +  "DataGrad"
-        elif record['lambda'] == 0.001:
-            return reg +  "SpectReg"
-        elif record['lambda'] == 0 and record['dg'] == 0:
-            return reg +  "NoGP"
-        else:
-            return None
-    if record['dg'] == 50:
-        return reg +  "DataGrad"
-    elif record['lambda'] == 0.01:
-        return reg +  "SpectReg"
-    elif record['lambda'] == 0 and record['dg'] == 0:
-        return reg +  "NoGP"
-    return None
+    return record['reg'] + "_dg-" + str(record['dg']) + "_spect-" + str(record['lambda'])
 
 
 # for visualizing grid_mnist_1b.sh results for lenettuned

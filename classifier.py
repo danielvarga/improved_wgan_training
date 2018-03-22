@@ -31,6 +31,7 @@ import gan_logging
 
 LAMBDA = 0 # 1e-4 # Gradient penalty lambda hyperparameter
 WEIGHT_DECAY = 0
+WEIGHT_PROD_DECAY = 0
 GRADIENT_SHRINKING = False
 LIPSCHITZ_TARGET = 1.0
 SHRINKING_NORM_EMA_FACTOR = 1.0
@@ -124,8 +125,8 @@ TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 if DO_BATCHNORM:
     DROPOUT_KEEP_PROB = 1.0
 
-SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}-do_{}-w_{}-ts_{}".format(
-    DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, LIPSCHITZ_TARGET,
+SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-wp_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}-do_{}-w_{}-ts_{}".format(
+    DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, WEIGHT_PROD_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n",
     "n" if not LEARNING_RATE_DECAY else LEARNING_RATE_DECAY,
     LEARNING_RATE,
@@ -324,6 +325,23 @@ with tf.variable_scope('weights_norm') as scope:
 if WEIGHT_DECAY > 0:
     disc_cost += WEIGHT_DECAY*weight_loss
 loss_list.append(('weight_loss', weight_loss))
+
+# weight prod regularization
+with tf.variable_scope('weights_prod') as scope:
+    weight_sums = tf.stack(
+        [tf.reduce_mean(var) for var in disc_filters]
+    )
+#    weight_sums_norm = tf.sqrt(1e-16 + tf.reduce_sum(tf.square(weight_sums)))
+#    weight_sums = weight_sums / weight_sums_norm
+    
+    weight_prod_loss = tf.square(tf.reduce_prod(weight_sums, name='weight_prod_loss'))
+if WEIGHT_PROD_DECAY > 0:
+    disc_cost += WEIGHT_PROD_DECAY*weight_prod_loss
+loss_list.append(('weight_prod_loss', weight_prod_loss))
+
+    
+    
+
 
 global_step = global_step = tf.Variable(0, trainable=False)
 if LEARNING_RATE_DECAY == "piecewise":
