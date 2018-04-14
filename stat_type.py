@@ -64,6 +64,7 @@ def types_mnist_4(record):
 
 # for visualizing grid_mnist_6.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_6 test_accuracy test 10000 -type_grouping mnist_6
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_6_rerun test_accuracy test 10000 -type_grouping mnist_6
 def types_mnist_6(record):
     if record['comb'] == 'softmax':
         return "JacReg"
