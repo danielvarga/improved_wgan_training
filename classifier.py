@@ -218,7 +218,7 @@ def get_slopes(input):
         else:
             assert False, "Not supported COMBINE_OUTPUTS_MODE: " + COMBINE_OUTPUTS_MODE
 
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+        slopes = tf.sqrt(1e-16 + tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     else:
         if COMBINE_OUTPUTS_MODE == "softmax": # this is the true JacReg version
             jacobians = util.jacobian_by_batch(tf.nn.softmax(output), input) 
@@ -354,7 +354,7 @@ else:
     learning_rate = LEARNING_RATE
 
 
-if DISC_TYPE == "cifarResnet":
+if DISC_TYPE == "cifarResnet"  and DATASET == "cifar10":
     disc_optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate,
         momentum=0.9,
