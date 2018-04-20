@@ -1,5 +1,5 @@
 import numpy as np
-from keras.datasets import mnist, cifar10
+from keras.datasets import mnist, cifar10, cifar100
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.data_utils import get_file
 import gzip
@@ -20,6 +20,10 @@ def load_raw_data(dataset, seed=None):
 
     elif dataset == "cifar10":
         (X_train, y_train), (X_test, y_test) = cifar10.load_data()
+        y_train = np.squeeze(y_train)
+        y_test = np.squeeze(y_test)
+    elif dataset == "cifar100":
+        (X_train, y_train), (X_test, y_test) = cifar100.load_data()
         y_train = np.squeeze(y_train)
         y_test = np.squeeze(y_test)
     else:
