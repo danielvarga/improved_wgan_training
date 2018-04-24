@@ -125,6 +125,9 @@ TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 if DO_BATCHNORM:
     DROPOUT_KEEP_PROB = 1.0
 
+if DATASET == "cifar100":
+    OUTPUT_COUNT=100
+    
 SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-wp_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}-do_{}-w_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, WEIGHT_PROD_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n",
@@ -354,7 +357,7 @@ else:
     learning_rate = LEARNING_RATE
 
 
-if DISC_TYPE == "cifarResnet"  and DATASET == "cifar10":
+if DISC_TYPE == "cifarResnet":
     disc_optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate,
         momentum=0.9,

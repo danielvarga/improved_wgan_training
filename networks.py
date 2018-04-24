@@ -222,7 +222,7 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
             return predictions
 
         output = tf.reshape(inputs, [-1] + list(INPUT_SHAPE))
-        output = build_net(output, filter_num_config=filter_num_config, nb_classes=10)
+        output = build_net(output, filter_num_config=filter_num_config, nb_classes=OUTPUT_COUNT)
         return output
 
 
