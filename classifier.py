@@ -125,6 +125,9 @@ TOTAL_TRAIN_SIZE = TRAIN_DATASET_SIZE
 if DO_BATCHNORM:
     DROPOUT_KEEP_PROB = 1.0
 
+if DATASET == "cifar100":
+    OUTPUT_COUNT=100
+    
 SESSION_NAME = "dataset_{}-net_{}-iters_{}-train_{}-lambda_{}-wd_{}-wp_{}-lips_{}-combslopes_{}-lrd_{}-lr_{}-aug_{}-bs_{}-bn_{}-gp_{}-gs_{}-dg_{}-comb_{}-topk_{}-ent_{}-do_{}-w_{}-ts_{}".format(
     DATASET, DISC_TYPE, ITERS, TRAIN_DATASET_SIZE, LAMBDA, WEIGHT_DECAY, WEIGHT_PROD_DECAY, LIPSCHITZ_TARGET,
     "y" if COMBINE_OUTPUTS_FOR_SLOPES else "n",
@@ -218,7 +221,7 @@ def get_slopes(input):
         else:
             assert False, "Not supported COMBINE_OUTPUTS_MODE: " + COMBINE_OUTPUTS_MODE
 
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+        slopes = tf.sqrt(1e-16 + tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
     else:
         if COMBINE_OUTPUTS_MODE == "softmax": # this is the true JacReg version
             jacobians = util.jacobian_by_batch(tf.nn.softmax(output), input) 
