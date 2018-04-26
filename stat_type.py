@@ -95,7 +95,7 @@ def types_mnist_6(record):
         return "blabla"
 
 # for visualizing grid_cifar10_6.sh results for lenet
-# python stat.py logs test_accuracy test 50000 -type_grouping cifar10_6
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar10_6 test_accuracy test 50000 -type_grouping cifar10_6
 def types_cifar10_6(record):
     if record['comb'] == 'softmax':
         return "JacReg"
