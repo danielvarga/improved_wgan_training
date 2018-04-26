@@ -84,6 +84,27 @@ def types_mnist_6(record):
     else:
         return "blabla"
 
+# for visualizing grid_cifar10_6.sh results for lenet
+# python stat.py logs test_accuracy test 50000 -type_grouping cifar10_6
+def types_cifar10_6(record):
+    if record['comb'] == 'softmax':
+        return "JacReg"
+    elif record['comb'] == 'onehot':
+        return "Onehot"
+    elif record['comb'] == 'random_onehot':
+        return "Random Onehot"    
+    elif record['combslopes'] == 'n':
+        if record['lambda'] == 0.03:
+            return "Frob"
+        else:
+            return None
+    elif record['lambda'] > 0:
+        return "SpectReg"
+    elif record['dg'] > 0:
+        return "DataGrad"
+    else:
+        return "blabla"
+
 # for visualizing grid_mnist_compare2000_onehot.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_compare2000_onehot test_accuracy test 10000 -type_grouping random_onehot_lenet -x_key net
 def types_random_onehot_lenet(record):
