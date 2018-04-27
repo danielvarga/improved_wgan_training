@@ -115,6 +115,12 @@ def types_cifar10_6(record):
     else:
         return "blabla"
 
+# for visualizing grid_cifar100_spectreg.sh results for lenet
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_spectreg test_accuracy test 50000 -type_grouping cifar100_spectreg -x_key lambda
+def types_cifar100_spectreg(record):
+    return "SpectReg_{0:0f}".format(record['lambda'])
+
+    
 # for visualizing grid_mnist_compare2000_onehot.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_compare2000_onehot test_accuracy test 10000 -type_grouping random_onehot_lenet -x_key net
 def types_random_onehot_lenet(record):

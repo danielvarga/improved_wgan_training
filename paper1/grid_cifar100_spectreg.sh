@@ -1,0 +1,33 @@
+# best result is obtained with lambda=0.00003
+
+NAME=cifar100_spectreg
+mkdir -p couts/
+echo $NAME
+
+D=1
+DATASET=cifar100
+ITERS=50000
+BS=128
+LR=0.01
+LRD=piecewise
+WD=0.003
+NET=cifarResnet
+BN=True
+TRAIN=20000
+AUGMENTATION=False
+WIDENESS=3
+
+for C in `seq 1 1 1`
+do
+    echo ITER $C
+    COMMON_ARGS="--MEMORY_SHARE=0.95 --DATASET=$DATASET --ITERS=$ITERS --BATCH_SIZE=$BS --LEARNING_RATE=$LR --LEARNING_RATE_DECAY=$LRD --WEIGHT_DECAY=$WD --DISC_TYPE=$NET --WIDENESS=$WIDENESS --DO_BATCHNORM=$BN --TRAIN_DATASET_SIZE=$TRAIN --AUGMENTATION=$AUGMENTATION"
+    
+    #    for LAMBDA in 0 0001 0.0003 0.001 0.003 0.01 0.03 0.1
+    for LAMBDA in 0.0001 0.00003 0.00001 0.000003 0.000001 
+    do
+	echo LAMBDA $LAMBDA
+	CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --RANDOM_SEED=$C --LAMBDA=$LAMBDA > couts/$NAME.LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.LAMBDA_${LAMBDA}_${C}.cerr
+    done
+done
+
+echo "DONE"

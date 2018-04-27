@@ -58,7 +58,8 @@ for folder, subs, files in os.walk(rootdir):
         d={}
 
         for key in keys_from_filepath:
-            match = re.search("\-"+key+"_(?P<val>([^\-]+|\-[^\-]+))\-", folder)
+            # match = re.search("\-"+key+"_(?P<val>([^\-]+|\-[^\-]+))\-", folder)
+            match = re.search("\-"+key+"_(?P<val>([0-9].*[0-9]*e\-[0-9]+|[^\-]+|\-[^\-]+))\-", folder) # allow for 3e-6 like expressions
             if match:
                 val = match.group('val')
                 record[key] = float(val) if represents_float(val) else val
