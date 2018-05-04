@@ -115,6 +115,12 @@ def types_cifar10_6(record):
     else:
         return "blabla"
 
+# for visualizing grid_cifar10_frobreg.sh results
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar10_frobreg devel_accuracy test 50000 -type_grouping cifar10_frobreg
+def types_cifar10_frobreg(record):
+    return "FrobReg_{0:0f}".format(record['lambda'])
+
+
 # for visualizing grid_cifar100_spectreg.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_spectreg test_accuracy test 50000 -type_grouping cifar100_spectreg -x_key lambda
 def types_cifar100_spectreg(record):
