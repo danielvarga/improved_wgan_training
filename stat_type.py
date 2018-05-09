@@ -127,6 +127,7 @@ def types_cifar100_dg(record):
 
 # for visualizing grid_cifar100_dg_spect.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_dg_spect test_accuracy test 50000 -type_grouping cifar100_dg_spect
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_dg_spect_aug test_accuracy test 50000 -type_grouping cifar100_dg_spect
 def types_cifar100_dg_spect(record):
     if record['dg'] > 0:
         return "DataGrad"
