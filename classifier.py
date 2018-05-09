@@ -45,6 +45,7 @@ ALPHA_STRATEGY = "real"
 SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
 COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
 LEARNING_RATE_DECAY = False
+MOMENTUM=0.9
 if LEARNING_RATE_DECAY == "piecewise":
     LEARNING_RATE = 0.1
 elif LEARNING_RATE_DECAY == "exponential":
@@ -109,7 +110,7 @@ for k, v in [arg.split('=', 1) for arg in sys.argv[1:]]:
     locals()[k] = v
 
 
-assert LEARNING_RATE_DECAY in ("piecewise", "exponential", False)
+assert LEARNING_RATE_DECAY in ("piecewise", "exponential", "linear", False)
 assert COMBINE_OUTPUTS_FOR_SLOPES in (True, False)
 
 assert WIDENESS == 1 or DISC_TYPE == "cifarResnet"
@@ -353,6 +354,12 @@ if LEARNING_RATE_DECAY == "piecewise":
     learning_rate = tf.train.piecewise_constant(global_step, boundaries, values)
 elif LEARNING_RATE_DECAY == "exponential":
     learning_rate = tf.train.exponential_decay(LEARNING_RATE, global_step, 1000, 0.9, staircase=False)
+elif LEARNING_RATE_DECAY == "linear":
+    values = [LEARNING_RATE * v for v in (1.0, 10.0, 1.0)]
+    momentum_values = [MOMENTUM * m for m in (1.0, 0.8, 1.0)]
+    boundaries = [0, ITERS//2, ITERS]
+    learning_rate = util.piecewise_linear_schedule(global_step, boundaries, values)
+    MOMENTUM = util.piecewise_linear_schedule(global_step, boundaries, momentum_values)
 else:
     learning_rate = LEARNING_RATE
 
@@ -360,7 +367,7 @@ else:
 if DISC_TYPE == "cifarResnet":
     disc_optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate,
-        momentum=0.9,
+        momentum=MOMENTUM,
         use_nesterov=True
     )
 else:
