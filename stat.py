@@ -102,15 +102,32 @@ for folder, subs, files in os.walk(rootdir):
 # print(records)
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
-records = sorted(records, key=lambda k: k['type']) 
-data = pd.DataFrame(records)
 
+#mnist_4 ordering:
+def mnist_4_ordering(t):
+    if t == "DoubleBack":
+        return 0
+    elif t == "SpectReg":
+        return 1
+    elif t == "JacReg":
+        return 2
+    elif t == "Confidence Penalty":
+        return 3
+    else:
+        return 4
+# records = sorted(records, key=lambda k: mnist_4_ordering(k['type'])) 
+records = sorted(records, key=lambda k: k['type']) 
+
+data = pd.DataFrame(records)
 print(data.groupby("type")[z_key].describe())
 
 ax = sns.boxplot(x=x_key, y=z_key, hue="type", data=data, palette="PRGn")
+# ax.set(xlabel='Train size',ylabel='Test accuracy')
+plt.tight_layout()
 sns.despine(offset=10, trim=True)
 # ax.set_title("MNIST, train size: 2000, baseline: LeNet (Lecun et al.), 10 runs")
 ax.get_figure().savefig("mnist_boxplot.png")
+ax.get_figure().savefig("mnist_boxplot.pdf")
 
 # print averages
 grouped_data = data.groupby((x_key, 'type'))
