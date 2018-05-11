@@ -129,7 +129,7 @@ def types_cifar100_spectreg(record):
 # for visualizing grid_cifar100_datagrad.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_datagrad test_accuracy test 50000 -type_grouping cifar100_dg -x_key dg
 def types_cifar100_dg(record):
-    return "SpectReg_{0:0f}".format(record['dg'])
+    return "DataGrad_{0:0f}".format(record['dg'])
 
 # for visualizing grid_cifar100_dg_spect.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_dg_spect test_accuracy test 50000 -type_grouping cifar100_dg_spect
@@ -142,6 +142,10 @@ def types_cifar100_dg_spect(record):
     else:
         return "Baseline"
 
+# for visualizing grid_cifar100_entreg.sh results
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_entreg devel_accuracy test 50000 -type_grouping cifar100_entreg -x_key ent
+def types_cifar100_entreg(record):
+    return "EntReg_{0:0f}".format(record['ent'])
 
 
 
