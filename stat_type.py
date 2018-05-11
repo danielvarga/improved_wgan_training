@@ -52,11 +52,12 @@ def types_cifar10_ent_dg_spect(record):
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar10_dg_spect_wd test_accuracy test 50000 -type_grouping cifar10_dg_spect_wd -x_key wd
 def types_cifar10_dg_spect_wd(record):
     if record['dg'] > 0:
-        return "DataGrad"
+        prefix = "DataGrad"
     elif record['lambda'] > 0:
-        return "SpectReg"
+        prefix = "SpectReg"
     else:
-        return "Baseline"
+        prefix = "Baseline"
+    return prefix + "_wd-{}".format(record['wd'])
 
 # for visualizing grid_mnist_4.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_4 test_accuracy test 10000 -type_grouping mnist_4
@@ -66,7 +67,7 @@ def types_mnist_4(record):
     elif record['lambda'] > 0:
         return "SpectReg"
     elif record['dg'] > 0:
-        return "DataGrad"
+        return "DoubleBack"
     elif record['ent'] > 0:
         return "Confidence Penalty"
     else:
