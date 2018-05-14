@@ -1,0 +1,31 @@
+# optimal spectreg weight if there is no wd: 0.001
+NAME=cifar10_spectreg_nowd
+mkdir -p couts/
+echo $NAME
+
+D=2
+DATASET=cifar10
+ITERS=50000
+BS=128
+LR=0.01
+LRD=piecewise
+WD=0
+NET=cifarResnet
+BN=True
+TRAIN=2000
+AUGMENTATION=False
+WIDENESS=3
+
+for C in `seq 1 1 1`
+do
+    echo ITER $C
+    COMMON_ARGS="--MEMORY_SHARE=0.95 --DATASET=$DATASET --ITERS=$ITERS --BATCH_SIZE=$BS --LEARNING_RATE=$LR --LEARNING_RATE_DECAY=$LRD --WEIGHT_DECAY=$WD --DISC_TYPE=$NET --WIDENESS=$WIDENESS --DO_BATCHNORM=$BN --TRAIN_DATASET_SIZE=$TRAIN --AUGMENTATION=$AUGMENTATION"
+    
+    for LAMBDA in 0.003 0.01 0.03 0.1 0.001 0.0003
+    do
+	echo LAMBDA $LAMBDA
+	CUDA_VISIBLE_DEVICES=$D python classifier.py $COMMON_ARGS --RANDOM_SEED=$C --LAMBDA=$LAMBDA > couts/$NAME.LAMBDA_${LAMBDA}_${C}.cout 2> couts/$NAME.LAMBDA_${LAMBDA}_${C}.cerr
+    done
+done
+
+echo "DONE"

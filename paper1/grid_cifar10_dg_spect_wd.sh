@@ -17,7 +17,7 @@ DG=1
 EP=0.003
 LAMBDA=0.003
 
-for C in `seq 1 1 5`
+for C in `seq 1 1 10`
 do
     echo ITER $C
 	for WD in 0 0.001 0.003 0.01
