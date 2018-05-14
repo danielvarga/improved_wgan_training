@@ -132,12 +132,25 @@ def types_cifar100_dg(record):
     return "SpectReg_{0:0f}".format(record['dg'])
 
 # for visualizing grid_cifar100_dg_spect.sh results
-# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_dg_spect test_accuracy test 50000 -type_grouping cifar100_dg_spect
-def types_cifar100_dg_spect(record):
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_dg_spect test_accuracy test 50000 -type_grouping cifar100_dg_spect_ent
+# def types_cifar100_dg_spect(record):
+#     if record['dg'] > 0:
+#         return "DataGrad"
+#     elif record['lambda'] > 0:
+#         return "SpectReg"
+#     else:
+#         return "Baseline"
+
+# for visualizing grid_cifar100_dg_spect.sh results
+# for visualizing grid_cifar100_entreg_repeated.sh results
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_dg_spect_ent test_accuracy test 50000 -type_grouping cifar100_dg_spect_ent
+def types_cifar100_dg_spect_ent(record):
     if record['dg'] > 0:
         return "DataGrad"
     elif record['lambda'] > 0:
         return "SpectReg"
+    elif record['ent'] > 0:
+        return "EntReg"
     else:
         return "Baseline"
 

@@ -2,7 +2,7 @@ NAME=cifar100_dg_spect
 mkdir -p couts/
 echo $NAME
 
-D=1
+D=0
 DATASET=cifar100
 ITERS=50000
 BS=128
@@ -13,7 +13,7 @@ NET=cifarResnet
 BN=True
 TRAIN=20000
 AUGMENTATION=False
-WIDENESS=1
+WIDENESS=3
 DG=0.003
 LAMBDA=0.00003
 
