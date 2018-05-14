@@ -52,11 +52,12 @@ def types_cifar10_ent_dg_spect(record):
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar10_dg_spect_wd test_accuracy test 50000 -type_grouping cifar10_dg_spect_wd -x_key wd
 def types_cifar10_dg_spect_wd(record):
     if record['dg'] > 0:
-        return "DataGrad"
+        prefix = "DataGrad"
     elif record['lambda'] > 0:
-        return "SpectReg"
+        prefix = "SpectReg"
     else:
-        return "Baseline"
+        prefix = "Baseline"
+    return prefix + "_wd-{}".format(record['wd'])
 
 # for visualizing grid_mnist_4.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_4 test_accuracy test 10000 -type_grouping mnist_4
@@ -66,7 +67,7 @@ def types_mnist_4(record):
     elif record['lambda'] > 0:
         return "SpectReg"
     elif record['dg'] > 0:
-        return "DataGrad"
+        return "DoubleBack"
     elif record['ent'] > 0:
         return "Confidence Penalty"
     else:
@@ -129,17 +130,11 @@ def types_cifar100_spectreg(record):
 # for visualizing grid_cifar100_datagrad.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_datagrad test_accuracy test 50000 -type_grouping cifar100_dg -x_key dg
 def types_cifar100_dg(record):
-    return "SpectReg_{0:0f}".format(record['dg'])
+    return "DataGrad_{0:0f}".format(record['dg'])
 
 # for visualizing grid_cifar100_dg_spect.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_dg_spect test_accuracy test 50000 -type_grouping cifar100_dg_spect_ent
-# def types_cifar100_dg_spect(record):
-#     if record['dg'] > 0:
-#         return "DataGrad"
-#     elif record['lambda'] > 0:
-#         return "SpectReg"
-#     else:
-#         return "Baseline"
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_dg_spect_aug test_accuracy test 50000 -type_grouping cifar100_dg_spect_ent
 
 # for visualizing grid_cifar100_dg_spect.sh results
 # for visualizing grid_cifar100_entreg_repeated.sh results
@@ -154,6 +149,10 @@ def types_cifar100_dg_spect_ent(record):
     else:
         return "Baseline"
 
+# for visualizing grid_cifar100_entreg.sh results
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_entreg devel_accuracy test 50000 -type_grouping cifar100_entreg -x_key ent
+def types_cifar100_entreg(record):
+    return "EntReg_{0:0f}".format(record['ent'])
 
 
 
@@ -322,78 +321,3 @@ def types_mnist_2(record):
     else:
         return "unreg"
     
-    
-"""
-                
-        if False: # comparing datagrad parameters with batchnorm
-            if record['dg'] == 0 or record['bn'] != "y":
-                continue
-            type = "dg_bn_" + str(record['dg'])
-        elif False: # comparing datagrad parameters with dropout
-            if record['dg'] == 0 or record['bn'] == "y":
-                continue
-            type = "dg_do_" + "%05.2f" % record['dg']
-        elif False: # comparing datagrad bn with datagrad do
-            if record['dg'] == 0:
-                continue
-            type = "dg_bn_" + str(record['bn'])
-        elif False: # comparing unreg dropout and batchnorm
-            if record['dg'] != 0 or record['lambda'] != 0 or record['gs'] == 'y':
-                continue
-            type = "unreg_bn_" + record['bn']
-        elif False: # comparing GP with L2 gradient loss bn vs dropout
-            if record['dg'] != 0 or record['lambda'] == 0 or record['gs'] != 'n' or record['comb'] != "random" or record['gp'] != 3:
-                continue
-            type = "gp3a_bn_" + record['bn']
-        elif False: # comparing GP with L2 gradient loss with dropout for various lambdas
-            if record['dg'] != 0 or record['lambda'] == 0 or record['gs'] != 'n' or record['comb'] != "random" or record['gp'] != 3 or record['bn'] != "n":
-                continue
-            type = "gp3a_do_" + "%06.4f" % record['lambda']
-        elif False: # comparing GP with softmax bn vs dropout
-            if record['dg'] != 0 or record['lambda'] == 0 or record['gs'] != 'n' or record['comb'] != "softmax" or record['gp'] != 3:
-                continue
-            type = "gp4_bn_" + record['bn']
-        elif False: # comparing GP with softmax for various lambdas
-            if record['dg'] != 0 or record['lambda'] == 0 or record['gs'] != 'n' or record['comb'] != "softmax" or record['gp'] != 3:
-                continue
-            type = "gp4_" + "%06.4f" % record['lambda']
-        elif False: # comparing GP with L2 gradient loss pushing gradients into LIPSCHITZ_TARGET bn vs dropout
-            if record['dg'] != 0 or record['lambda'] == 0 or record['gs'] != 'n' or record['comb'] != "random" or record['gp'] != 4:
-                continue
-            type = "gp3b_bn_" + record['bn']
-        elif False: # comparing GP with L2 gradient loss pushing gradients into LIPSCHITZ_TARGET with dropout for various lipschitz_targets
-            if record['dg'] != 0 or record['lambda'] == 0 or record['gs'] != 'n' or record['comb'] != "random" or record['gp'] != 4  or record['bn'] != "n":
-                continue
-            if record['lips'] > 2:
-                continue
-            type = "gp3b_do_" + "%05.2f" % record['lips']
-        elif False: # comparing GP with L2 gradient loss pushing gradients into LIPSCHITZ_TARGET with dropout for LIPS=0.7 various lambdas
-            if record['dg'] != 0 or record['lambda'] == 0 or record['gs'] != 'n' or record['comb'] != "random" or record['gp'] != 4  or record['bn'] != "n" or record['lips'] != 0.7:
-                continue
-            type = "gp3b_do_lips_0.7_" + "%06.4f" % record['lambda']
-        elif False: # final comparison
-            if record['dg'] == 0 and record['lambda'] == 0 and record['gs'] == 'n' and record['bn'] == 'n':
-                type = "1_unreg"
-            elif record['dg'] == 10 and record['bn'] == "n":
-                type = "2_datagrad"
-            elif record['dg'] == 0 and record['lambda'] == 0.01 and record['comb'] == "random" and record['gp'] == 3 and record['bn'] == 'n':
-                type = "3a_gp_to_zero"
-            elif record['dg'] == 0 and record['lambda'] == 0.01 and record['comb'] == "random" or record['gp'] == 4  and record['bn'] == "n" and record['lips'] == 0.7:
-                type = "3b_gp_to_lips"
-            elif record['dg'] == 0 and record['lambda'] == 0.1 and record['comb'] == "softmax" and record['gp'] == 3:
-                type = "4_softmax"
-            else:
-                continue
-
-        else:
-            type = "unknown"
-            if record['lambda'] == 0 and 'dg' in record  and  record['dg'] == 0:
-                type = 'nogp'
-            elif record['lambda'] != 0 and record['gp'] == 2:
-                type = 'gp'
-            elif record['lambda'] == 0 and 'dg' in record and record['dg'] != 0:
-                type = 'datagrad'
-            elif record['lambda'] == 0 and record['gs'] == 'y':
-                type = 'gs'
-
-"""
