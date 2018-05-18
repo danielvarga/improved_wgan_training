@@ -62,6 +62,9 @@ def types_cifar10_dg_spect_wd(record):
 # for visualizing grid_cifar10_spectreg_nowd.sh results
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar10_spectreg_nowd devel_accuracy test 50000 -type_grouping cifar100_spectreg -x_key lambda
 
+# for visualizing grid_cifar100_spect_wd.sh results
+# python stat.py /mnt/g2big/tensorboard_logs/paper1/cifar100_spect_wd test_accuracy test 50000 -type_grouping cifar100_spectreg
+
 # for visualizing grid_mnist_4.sh results for lenet
 # python stat.py /mnt/g2big/tensorboard_logs/paper1/mnist_4 test_accuracy test 10000 -type_grouping mnist_4
 def types_mnist_4(record):
