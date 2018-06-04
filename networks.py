@@ -132,6 +132,11 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         output = LeakyReLU(output, alpha=0.0)
         output = lib.ops.linear.Linear('Discriminator.2', DIM, DIM, output)
         output = LeakyReLU(output, alpha=0.0)
+        output = lib.ops.linear.Linear('Discriminator.3', DIM, DIM, output)
+        output = LeakyReLU(output, alpha=0.0)
+        output = lib.ops.linear.Linear('Discriminator.4', DIM, DIM, output)
+        output = LeakyReLU(output, alpha=0.0)
+        output = tf.nn.dropout(output, dropout)
         output = lib.ops.linear.Linear('Discriminator.output', DIM, OUTPUT_COUNT, output)
         return output
 

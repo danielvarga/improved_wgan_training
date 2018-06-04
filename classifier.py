@@ -46,6 +46,7 @@ SHRINKING_REDUCTOR = "max" # "none", "max", "mean", "logsum"
 COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random linear combination of the logits, and calculate the slope of that.
 LEARNING_RATE_DECAY = False
 MOMENTUM=0.9
+ZERO_WEIGHTS=0.0
 if LEARNING_RATE_DECAY == "piecewise":
     LEARNING_RATE = 0.1
 elif LEARNING_RATE_DECAY == "exponential":
@@ -374,9 +375,35 @@ else:
     disc_optimizer = tf.train.AdamOptimizer(
         learning_rate=learning_rate
     )
+    # disc_optimizer = tf.train.GradientDescentOptimizer(
+    #     learning_rate=learning_rate
+    # )
 
 disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
 disc_train_op = disc_optimizer.apply_gradients(disc_gvs, global_step=global_step)
+
+if ZERO_WEIGHTS > 0:
+    bernoulli_dist = tf.distributions.Bernoulli(probs=1.0-ZERO_WEIGHTS, dtype=tf.float32)
+
+    fan_in = DIM
+    fan_out = DIM
+    limit = np.sqrt(6 / (fan_in + fan_out))
+    uniform_dist = tf.distributions.Uniform(low=-limit, high=limit)
+
+    dense_weights = [param for param in disc_params if ("Discriminator.1.W" in param.name)]
+    conv_weights = [param for param in disc_params if ("Filter" in param.name)]
+    zero_params = dense_weights + conv_weights
+    print "XXXXXX : {}".format(len(zero_params))
+    ops = [disc_train_op]
+    for zero_param in zero_params:
+        mask = bernoulli_dist.sample(zero_param.shape)
+        new_init = tf.cast(uniform_dist.sample(zero_param.shape), tf.float32)
+
+        new_param = mask * zero_param + (1-mask) * new_init
+        ops.append(zero_param.assign(new_param))
+    disc_train_op = ops
+
+
 
 def evaluate(X_devel, y_devel):
     dev_disc_costs = []
