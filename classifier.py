@@ -61,7 +61,7 @@ TEST_DATASET_SIZE = 10000
 # BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 OUTPUT_COUNT = 10
 DATASET="mnist" # cifar10 / mnist
-DISC_TYPE = "lenet" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet"
+DISC_TYPE = "dense_with_act" # "lenet" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet"
 
 # Note that L2 ignores LIPSCHITZ_TARGET, while in all the PARABOLA versions
 # slope is first divided by LIPSCHITZ_TARGET.
@@ -165,12 +165,17 @@ real_labels = tf.placeholder(tf.uint8, shape=[BATCH_SIZE])
 real_labels_onehot = tf.one_hot(real_labels, OUTPUT_COUNT)
 
 real_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, INPUT_DIM])
-disc_real = Discriminator(real_data)
+disc_real, disc_activations = Discriminator(real_data)
 
 if DISC_TYPE == "cifarResnet":
     disc_params = tf.trainable_variables()
 else:
     disc_params = lib.params_with_name('Discriminator')
+
+
+disc_params = sorted(disc_params, key=lambda filter:filter.name)
+dense_weights = [param for param in disc_params if ("W" in param.name)]
+conv_weights = [param for param in disc_params if ("Filter" in param.name)]
 
 
 
@@ -184,7 +189,7 @@ def activation_to_loss(activation):
     return tf.reduce_mean(tf.maximum(0.0,tf.square(activation) - 1.0))
 
 def get_slopes(input):
-    output = Discriminator(input)
+    output, _ = Discriminator(input)
     if COMBINE_OUTPUTS_FOR_SLOPES:
         if COMBINE_OUTPUTS_MODE == "random":
             output_weights = tf.random_normal((OUTPUT_COUNT,))
@@ -313,19 +318,37 @@ if LAMBDA > 0:
     loss_list.append(('gradient_penalty', gradient_penalty))
 
 if ACTIVATION_PENALTY > 0:
-    activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY))
+    activation_loss = activation_to_loss(Discriminator(interpolates / ACTIVATION_PENALTY)[0])
     disc_cost += activation_loss
     loss_list.append(('activation_loss', activation_loss))
 
-# weight regularization
-with tf.variable_scope('weights_norm') as scope:
-    weight_loss = tf.reduce_sum(
-        input_tensor = tf.stack(
-            #[tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
-            [tf.nn.l2_loss(var) for var in disc_filters]
-        ),
-        name='weight_loss'
-    )
+if True:
+    # weight regularization
+    with tf.variable_scope('weights_norm') as scope:
+        weight_loss = tf.reduce_sum(
+            input_tensor = tf.stack(
+                #[tf.nn.l2_loss(tf.maximum(0.01, var)) for var in disc_filters]
+                [tf.nn.l2_loss(var) for var in disc_filters]
+            ),
+            name='weight_loss'
+        )
+elif False: # dense_with_act
+    print "THIS IS A HACK. A FRAGILE ONE. BE CAREFUL!!!"
+    # weight regularization
+    with tf.variable_scope('weights_norm') as scope:
+        weight_losses=[]
+        for i in range(len(dense_weights) - 1):
+            weights = dense_weights[i]
+            activations = disc_activations[i]
+            activations = tf.reduce_max(activations, axis=0)
+            weights *= tf.exp(-activations) # neurons with large activations have much smaller weight decay
+            weight_losses.append(tf.nn.l2_loss(weights))
+        weight_loss = tf.reduce_sum(
+            input_tensor = tf.stack(weight_losses),
+            name='weight_loss'
+        )
+else: # lenet
+    TODO
 
 if WEIGHT_DECAY > 0:
     disc_cost += WEIGHT_DECAY*weight_loss
@@ -390,8 +413,6 @@ if ZERO_WEIGHTS > 0:
     limit = np.sqrt(6 / (fan_in + fan_out))
     uniform_dist = tf.distributions.Uniform(low=-limit, high=limit)
 
-    dense_weights = [param for param in disc_params if ("Discriminator.1.W" in param.name)]
-    conv_weights = [param for param in disc_params if ("Filter" in param.name)]
     zero_params = dense_weights + conv_weights
     print "XXXXXX : {}".format(len(zero_params))
     ops = [disc_train_op]

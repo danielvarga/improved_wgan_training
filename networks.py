@@ -140,6 +140,32 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         output = lib.ops.linear.Linear('Discriminator.output', DIM, OUTPUT_COUNT, output)
         return output
 
+
+    def DenseDiscriminatorWithAct(inputs):
+        input_dim = np.prod(INPUT_SHAPE)
+        output = tf.reshape(inputs, [-1, input_dim])
+        actList = []
+
+        output = lib.ops.linear.Linear('Discriminator.1', input_dim, DIM, output)
+        output = LeakyReLU(output, alpha=0.0)
+        actList.append(output)
+        # output = lib.ops.linear.Linear('Discriminator.2', DIM, DIM, output)
+        # output = LeakyReLU(output, alpha=0.0)
+        # actList.append(output)
+        # output = lib.ops.linear.Linear('Discriminator.3', DIM, DIM, output)
+        # output = LeakyReLU(output, alpha=0.0)
+        # actList.append(output)
+        # output = lib.ops.linear.Linear('Discriminator.4', DIM, DIM, output)
+        # output = LeakyReLU(output, alpha=0.0)
+        # actList.append(output)
+        # output = lib.ops.linear.Linear('Discriminator.5', DIM, DIM, output)
+        # output = LeakyReLU(output, alpha=0.0)
+        # actList.append(output)
+#        output = tf.nn.dropout(output, dropout)
+        output = lib.ops.linear.Linear('Discriminator.output', DIM, OUTPUT_COUNT, output)
+        actList.append(output)
+        return output, actList
+
     def CifarResnet(inputs):
 
         N = 3
@@ -234,16 +260,21 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
     def LeNet(inputs):
         inputs = tf.reshape(inputs, [-1, 1, 28, 28])
 
+        actList = []
+
         net = lib.ops.conv2d.Conv2D("Discriminator.Conv0", CHANNEL, 6, 5, inputs, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='SAME')
         net = tf.nn.relu(net)
+        actList.append(net)
         net = tf.nn.max_pool(net, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
 
         net = lib.ops.conv2d.Conv2D("Discriminator.Conv1", 6, 16, 5, net, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='VALID')
         net = tf.nn.relu(net)
+        actList.append(net)
         net = tf.nn.max_pool(net, ksize=[1, 1, 2, 2], strides=[1, 1, 2, 2], padding='VALID', data_format='NCHW')
 
         net = lib.ops.conv2d.Conv2D("Discriminator.Conv2", 16, 120, 5, net, weight_noise_sigma=WEIGHT_NOISE_SIGMA, padding='VALID')
         net = tf.nn.relu(net)
+        actList.append(net)
 
         net = tf.reshape(net,[-1,120])
 
@@ -261,7 +292,7 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         net = lib.ops.linear.Linear('Discriminator.Linear2', 84, OUTPUT_COUNT, net)
 #        net = tf.nn.relu(net)
 
-        return net
+        return net, actList
 
 
     def LeNet_tuned(inputs):
@@ -328,6 +359,8 @@ def Discriminator_factory(disc_type, DIM, INPUT_SHAPE, BATCH_SIZE, DO_BATCHNORM=
         return ResnetDiscriminator
     elif disc_type == "dense":
         return DenseDiscriminator
+    elif disc_type == "dense_with_act":
+        return DenseDiscriminatorWithAct
     elif disc_type == "cifarResnet":
         return CifarResnet
     elif disc_type == "lenet":
