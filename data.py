@@ -93,6 +93,8 @@ def load_set(dataset, TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE,
         return load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 2, seed=seed)
     elif dataset == "toy1":
         return load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 1, seed=seed)
+    elif dataset == "step":
+        return load_step(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, 1, seed=seed)
 
     (X_train, y_train), (X_devel, y_devel), (X_test, y_test) = load_raw_data(dataset, seed=seed)
     assert len(X_train) >= TRAIN_DATASET_SIZE
@@ -238,6 +240,54 @@ def load_fashion_mnist():
                                offset=16).reshape(len(y_test), 28, 28)
 
     return (x_train, y_train), (x_test, y_test)
+
+
+# create a (-1,1) grid in 2 dim
+def create_grid_2dim(SIZE):
+    w = int(np.sqrt(SIZE))
+    Xs = np.zeros(shape=(w * w, 2))
+    for x1 in range(w):
+        for x2 in range(w):
+            Xs[w * x1 + x2] = float(x1) / w, float(x2) / w
+    Xs = 2 * Xs - 1
+    return Xs
+
+# create an n-dim (-1,1)
+def create_grid(SIZE, dim):
+    w = int(SIZE ** (1.0 / dim))
+    new_size = w ** dim
+    Xs = np.zeros(shape=(new_size, dim))
+    for i in range(new_size):
+        coordinates = []
+        s = i
+        for d in range(dim):
+            coordinates.append((float(s) % w) / (w-1))
+            s = s / w
+        Xs[i] = coordinates
+    Xs = 2 * Xs - 1
+    return Xs
+
+def load_step(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim=1, noise_sigma=0.0, seed=None):
+    if seed is not None:
+        np.random.seed(seed)
+
+    X_train = np.random.uniform(low=-1, size=(TRAIN_DATASET_SIZE, dim))
+
+    X_devel = create_grid(DEVEL_DATASET_SIZE, dim)
+
+    # y = np.floor(||5 * x||)
+    def f(xs):
+        xs = 10 * xs
+        ls = np.linalg.norm(xs, axis=1)
+        ys = np.floor(ls)
+        return np.reshape(ys, [len(ys), 1])
+    y_train = f(X_train)
+    y_devel = f(X_devel)
+    X_test = X_devel
+    y_test = y_devel
+
+    y_train += noise_sigma * np.random.normal(size=y_train.shape)
+    return (X_train, y_train), (X_devel, y_devel), (X_test, y_test)
 
 
 def load_toy(TRAIN_DATASET_SIZE, DEVEL_DATASET_SIZE, TEST_DATASET_SIZE, dim, seed=None):

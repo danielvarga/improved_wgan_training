@@ -50,13 +50,14 @@ COMBINE_OUTPUTS_FOR_SLOPES = True # if true we take a per-batch sampled random l
 LEARNING_RATE_DECAY = "piecewise"
 LEARNING_RATE = 0.01
 AUGMENTATION = False
+ZERO_WEIGHTS=0.0
 
 TRAIN_DATASET_SIZE = 100
 DEVEL_DATASET_SIZE = 900
 TEST_DATASET_SIZE = 400
 # BALANCED = False # if true we take TRAIN_DATASET_SIZE items from each digit class
 OUTPUT_COUNT = 10
-DATASET="toy1" # cifar10 / mnist
+DATASET= "step" # "toy1" # cifar10 / mnist
 DISC_TYPE = "toy" # "conv" / "resnet" / "dense" / "cifarResnet" / "lenet"
 
 # Note that L2 ignores LIPSCHITZ_TARGET, while in all the PARABOLA versions
@@ -168,6 +169,8 @@ if DISC_TYPE == "cifarResnet":
     disc_params = tf.trainable_variables()
 else:
     disc_params = lib.params_with_name('Discriminator')
+dense_weights = [param for param in disc_params if ("W" in param.name)]
+conv_weights = [param for param in disc_params if ("Filter" in param.name)]
 
 
 
@@ -359,6 +362,24 @@ else:
 disc_gvs = disc_optimizer.compute_gradients(disc_cost, var_list=disc_params)
 disc_train_op = disc_optimizer.apply_gradients(disc_gvs, global_step=global_step)
 
+if ZERO_WEIGHTS > 0:
+    bernoulli_dist = tf.distributions.Bernoulli(probs=1.0-ZERO_WEIGHTS, dtype=tf.float32)
+
+    fan_in = DIM
+    fan_out = DIM
+    limit = np.sqrt(6 / (fan_in + fan_out))
+    uniform_dist = tf.distributions.Uniform(low=-limit, high=limit)
+
+    zero_params = dense_weights + conv_weights
+    ops = [disc_train_op]
+    for zero_param in zero_params:
+        mask = bernoulli_dist.sample(zero_param.shape)
+        new_init = tf.cast(uniform_dist.sample(zero_param.shape), tf.float32)
+
+        new_param = mask * zero_param + (1-mask) * new_init
+        ops.append(zero_param.assign(new_param))
+    disc_train_op = ops
+
 def evaluate(X_devel, y_devel):
     dev_main_losses = []
     dev_disc_costs = []
@@ -426,11 +447,6 @@ def plot(train_xs, train_ys, test_xs, test_ys, name, scatter=False):
     plt.close()
 
 plot(X_train, y_train, X_devel, y_devel, "{}_orig.png".format(prefix), scatter=False)
-
-#print X_train[5]
-#print y_train[5]
-#print np.sum(np.square(X_train[5]))
-#xxx
 
 # Train loop
 config = tf.ConfigProto()
